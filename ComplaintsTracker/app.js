@@ -1138,7 +1138,7 @@
     renderSearch();
     populateLinkedSarSelect();
     populateInstitutionSelect();
-    renderLegalOverview();
+    if (qs('#panel-legal')) renderLegalOverview();
     renderAccountability();
     renderCalendar();
     renderDetailsPlaceholder();
