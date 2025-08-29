@@ -280,6 +280,25 @@
       await tx.done?.catch?.(() => {});
       return saved;
     },
+    async saveFilesForConcern(complaintId, concernId, fileList) {
+      if (!fileList || !fileList.length) return [];
+      const db = this.idb || (await this._openIdb());
+      const tx = db.transaction("files", "readwrite");
+      const store = tx.objectStore("files");
+      const saved = [];
+      for (const file of fileList) {
+        const arrayBuffer = await file.arrayBuffer();
+        const key = `${complaintId}/concerns/${concernId}/${file.name}`;
+        await new Promise((res, rej) => {
+          const putReq = store.put({ key, name: file.name, type: file.type, size: file.size, data: arrayBuffer });
+          putReq.onsuccess = () => res();
+          putReq.onerror = () => rej(putReq.error);
+        });
+        saved.push({ key, name: file.name, type: file.type, size: file.size });
+      }
+      await tx.done?.catch?.(() => {});
+      return saved;
+    },
     async listFiles(complaintId) {
       const db = this.idb || (await this._openIdb());
       const tx = db.transaction("files", "readonly");
@@ -296,6 +315,10 @@
         };
         req.onerror = () => reject(req.error);
       });
+    },
+    async listConcernFiles(complaintId, concernId) {
+      const all = await this.listFiles(complaintId);
+      return all.filter(f => f.key.startsWith(`${complaintId}/concerns/${concernId}/`));
     },
     async getFile(key) {
       const db = this.idb || (await this._openIdb());
@@ -566,7 +589,8 @@
                 <div>
                   <div><strong>${cc.summary}</strong></div>
                   <div class="list-meta">Decision: ${cc.decisionMaker || "—"} • ${fmtDate(cc.responseDate) || ""}</div>
-                  <div class="list-meta">Evidence: ${(cc.evidence||[]).join(", ") || "—"}</div>
+                  <div class="list-meta">Evidence URLs: ${((cc.evidence||[]).length ? (cc.evidence||[]).map(e => /^https?:\\/\\//i.test(e) ? `<a href="${e}" target="_blank" rel="noopener">${e}</a>` : e).join(", ") : "—")}</div>
+                  <div class="list-meta">Attachments: ${(cc.attachments||[]).length ? `${(cc.attachments||[]).length} file(s)` : "—"}</div>
                 </div>
                 <div>
                   <div>${cc.response || ""}</div>
@@ -574,6 +598,8 @@
                     <button class="btn secondary" data-action="respond" data-id="${cc.id}">Respond</button>
                     <button class="btn secondary" data-action="edit" data-id="${cc.id}">Edit</button>
                     <button class="btn secondary" data-action="delete" data-id="${cc.id}">Delete</button>
+                    <button class="btn secondary" data-action="addevidence" data-id="${cc.id}">Add URLs</button>
+                    <button class="btn secondary" data-action="addfiles" data-id="${cc.id}">Add Files</button>
                   </div>
                 </div>
               </div>
@@ -656,7 +682,7 @@
       showComplaintDetails(complaint);
     });
 
-    // Concern actions: respond/edit/delete
+    // Concern actions: respond/edit/delete/add URLs/add files
     const concernsEl = qs('#concernsList');
     concernsEl.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-action][data-id]');
@@ -695,6 +721,48 @@
         Data.upsertComplaint(complaint);
         showComplaintDetails(complaint);
       }
+      if (action === 'addevidence') {
+        const urls = prompt('Add evidence URLs (comma-separated):', '') || '';
+        if (urls) {
+          const parts = urls.split(',').map(s => s.trim()).filter(Boolean);
+          cc.evidence = Array.from(new Set([...(cc.evidence||[]), ...parts]));
+          appendHistory(complaint, `Concern evidence URLs added: ${cc.summary}`);
+          Data.upsertComplaint(complaint);
+          showComplaintDetails(complaint);
+        }
+      }
+      if (action === 'addfiles') {
+        const finput = document.createElement('input');
+        finput.type = 'file';
+        finput.multiple = true;
+        finput.style.display = 'none';
+        document.body.appendChild(finput);
+        finput.addEventListener('change', async () => {
+          try {
+            const saved = await Data.saveFilesForConcern(complaint.id, cc.id, finput.files);
+            cc.attachments = Array.from(new Set([...(cc.attachments||[]), ...saved.map(s => s.key)]));
+            appendHistory(complaint, `Concern files added: ${cc.summary}`);
+            Data.upsertComplaint(complaint);
+            showComplaintDetails(complaint);
+          } finally {
+            document.body.removeChild(finput);
+          }
+        }, { once: true });
+        finput.click();
+      }
+    });
+
+    // Per-concern attachment downloads (delegated)
+    concernsEl.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-filekey]');
+      if (!btn) return;
+      const item = await Data.getFile(btn.getAttribute('data-filekey'));
+      if (!item) return;
+      const blob = new Blob([item.data], { type: item.type || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = item.name; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 500);
     });
 
     qs("#editBtn").addEventListener("click", () => {
@@ -1011,6 +1079,14 @@
     setupTabs();
     setupThemeToggle();
     await Data.init();
+    // After data init, auto-create PHSO cases for complaints whose status includes 'PHSO'
+    try {
+      for (const c of Data.complaints) {
+        if ((c.status||'').match(/phso/i)) {
+          await autoCreatePhsoCase(c);
+        }
+      }
+    } catch {}
     bindGlobalActions();
     handleAddComplaint();
     renderAll();

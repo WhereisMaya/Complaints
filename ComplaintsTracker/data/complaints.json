@@ -76,6 +76,35 @@
       {"date": "2025-06-05", "event": "Complaint filed"},
       {"date": "2025-06-30", "event": "No response"}
     ]
+  },
+  {
+    "id": "cmp_004",
+    "title": "Complaint to PHSO about unresolved GMC case",
+    "dateFiled": "2025-08-22",
+    "institution": "PHSO",
+    "contactPerson": "Intake Officer",
+    "complaintContent": "Escalation to PHSO after no satisfactory response from GMC.",
+    "linkedSAR": null,
+    "concerns": [
+      {
+        "id": "conc_001",
+        "summary": "No response to complaint for 30 days",
+        "details": "Original complaint to GMC received no substantive response in 30 days.",
+        "evidence": ["https://example.com/gmc-case-summary"],
+        "response": "Acknowledged by PHSO",
+        "decisionMaker": "PHSO Caseworker",
+        "responseDate": "2025-08-25"
+      }
+    ],
+    "status": "Escalated to PHSO",
+    "escalationPath": ["Filed", "Escalated to PHSO"],
+    "isPasswordProtected": false,
+    "passwordHint": "",
+    "attachments": [],
+    "history": [
+      {"date": "2025-08-22", "event": "Complaint filed"},
+      {"date": "2025-08-25", "event": "PHSO acknowledged"}
+    ]
   }
 ]
 

@@ -67,5 +67,5 @@ input:checked + .slider:before { transform: translateX(18px); }
 .cal-title { font-weight: 600; margin-bottom: 6px; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-day { border: 1px dashed var(--border); border-radius: 4px; min-height: 24px; text-align: center; color: var(--muted); }
-.cal-day.cal-hit { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); border-style: solid; }
+.cal-day.cal-hit { background: color-mix(in srgb, #f1c40f 28%, transparent); color: var(--text); border-style: solid; }
 
