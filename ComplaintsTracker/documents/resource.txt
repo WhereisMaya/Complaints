@@ -1,15 +1,5 @@
-https://example.org
-This is the Complaints tracker resources file.
-Add your site URL on the first line.
-Then list any Site Details on new lines.
-https://mindseye.dev/
-Anti-abuse Website Applications
-https://favicon.io/
-FavIcon Maker 😍
-https://trevi.org.uk/
-Trevi Women Site Where Life begins
-https://www.youtube.com/
-24 Video Channels
-https://export-youtube-playlist.vercel.app/
-Playlist Selector
-
+https://mindseye.dev/ | Anti-abuse Website Applications
+https://favicon.io/ | FavIcon Maker 😍
+https://trevi.org.uk/ | Trevi Women Site Where Life begins
+https://www.youtube.com/ | 24 Video Channels
+https://export-youtube-playlist.vercel.app/ | Playlist Selector

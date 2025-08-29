@@ -1507,16 +1507,17 @@
       const res = await fetch('documents/resource.txt', { cache: 'no-store' });
       if (!res.ok) throw new Error('Missing resource.txt');
       const text = await res.text();
-      const lines = text.split(/\r?\n/);
-      const nonEmpty = lines.map(l => l.trim()).filter(Boolean);
-      const urlLine = nonEmpty.find(l => l.startsWith('http://') || l.startsWith('https://')) || '';
-      const details = nonEmpty.filter(l => l !== urlLine);
-      const urlHtml = urlLine ? `<a href="${urlLine}" target="_blank" rel="noopener">${urlLine}</a>` : 'No URL provided';
-      const detailsHtml = details.length ? details.map(d => `<div class="list-item"><div>${d}</div></div>`).join('') : '<div class="list-item"><div>No details provided</div></div>';
-      container.innerHTML = `
-        <div class="list-item"><div><strong>Site URL</strong></div><div>${urlHtml}</div></div>
-        ${detailsHtml}
-      `;
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const items = [];
+      for (const line of lines) {
+        const match = line.match(/https?:\/\/\S+/);
+        if (!match) continue;
+        const url = match[0];
+        let desc = (line.replace(url, '').trim()).replace(/^[\-–—,:\s]+/, '').trim();
+        if (!desc) { try { desc = new URL(url).hostname; } catch { desc = 'Link'; } }
+        items.push({ url, desc });
+      }
+      container.innerHTML = (items.length ? items.map(it => `<div class="list-item"><div>${it.desc} — <a href="${it.url}" target="_blank" rel="noopener">${it.url}</a></div></div>`).join('') : '<div class="list-item"><div>No resources listed</div></div>');
     } catch (e) {
       container.innerHTML = '<div class="list-item"><div>resource.txt not found. Add one under documents/ to populate this section.</div></div>';
     }
