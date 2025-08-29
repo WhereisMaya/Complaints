@@ -347,6 +347,7 @@
       if (tab === 'legal') renderLegalOverview();
       if (tab === 'all') renderComplaintsList();
       if (tab === 'dashboard') { computeMetrics(); renderSearch(); renderFilters(); }
+      if (tab === 'details') renderDetailsPlaceholder();
       if (tab === 'resources') renderResources();
     }));
   }
@@ -621,6 +622,7 @@
         </div>
       </div>
     `;
+    el.setAttribute('data-has-complaint', '1');
 
     // Render attachments now that the DOM is in place
     const listEl = qs('#attachmentsList');
@@ -663,25 +665,7 @@
       }
     });
 
-    qs("#addConcernBtn").addEventListener("click", () => {
-      const summary = prompt("Concern summary:") || "";
-      if (!summary) return;
-      const details = prompt("Details:") || "";
-      const evidence = prompt("Evidence filenames or URLs (comma-separated):") || "";
-      const response = prompt("Response:") || "";
-      const decisionMaker = prompt("Decision maker:") || "";
-      const responseDate = prompt("Response date (YYYY-MM-DD):") || "";
-      complaint.concerns = complaint.concerns || [];
-      complaint.concerns.push({
-        id: Data.nextConcernId(complaint),
-        summary, details,
-        evidence: evidence ? evidence.split(",").map(s => s.trim()).filter(Boolean) : [],
-        response, decisionMaker, responseDate
-      });
-      appendHistory(complaint, `Concern added: ${summary}`);
-      Data.upsertComplaint(complaint);
-      showComplaintDetails(complaint);
-    });
+    qs("#addConcernBtn").addEventListener("click", () => openConcernModal(complaint));
 
     // Concern actions: respond/edit/delete/add URLs/add files
     const concernsEl = qs('#concernsList');
@@ -990,6 +974,7 @@
     populateInstitutionSelect();
     renderLegalOverview();
     renderCalendar();
+    renderDetailsPlaceholder();
     renderResources();
   }
 
@@ -1100,6 +1085,88 @@
     }
   }
 
+  function openConcernModal(complaint) {
+    const root = qs('#modalRoot');
+    if (!root) return;
+    const id = Data.nextConcernId(complaint);
+    root.innerHTML = `
+      <div class="modal-backdrop" id="concernModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">Add Concern</div>
+            <button class="btn secondary" id="concernCancel">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="form">
+              <div class="form-row">
+                <label>Summary<input id="concSummary" required /></label>
+                <label>Decision Maker<input id="concDecision" /></label>
+              </div>
+              <div class="form-row">
+                <label>Response Date<input id="concRespDate" type="date" /></label>
+              </div>
+              <div class="form-row">
+                <label>Details<textarea id="concDetails" rows="4"></textarea></label>
+              </div>
+              <div class="form-row">
+                <label>Evidence URLs (comma-separated)<input id="concUrls" placeholder="https://..." /></label>
+                <label>Attach Files<input id="concFiles" type="file" multiple /></label>
+              </div>
+              <div class="form-row">
+                <label>Initial Response<textarea id="concResponse" rows="3"></textarea></label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="concernSave">Save Concern</button>
+            <button class="btn secondary" id="concernCancel2">Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+    const close = () => { root.innerHTML = ''; };
+    qs('#concernCancel').addEventListener('click', close);
+    qs('#concernCancel2').addEventListener('click', close);
+    qs('#concernModal').addEventListener('click', (e) => { if (e.target.id === 'concernModal') close(); });
+    qs('#concernSave').addEventListener('click', async () => {
+      const summary = (qs('#concSummary').value || '').trim();
+      if (!summary) { alert('Summary is required'); return; }
+      const details = (qs('#concDetails').value || '').trim();
+      const decisionMaker = (qs('#concDecision').value || '').trim();
+      const responseDate = (qs('#concRespDate').value || '').trim();
+      const response = (qs('#concResponse').value || '').trim();
+      const urls = (qs('#concUrls').value || '').split(',').map(s => s.trim()).filter(Boolean);
+      const filesInput = qs('#concFiles');
+      complaint.concerns = complaint.concerns || [];
+      const concern = { id, summary, details, evidence: urls, response, decisionMaker, responseDate, attachments: [] };
+      complaint.concerns.push(concern);
+      const files = filesInput && filesInput.files ? filesInput.files : [];
+      if (files && files.length) {
+        const saved = await Data.saveFilesForConcern(complaint.id, concern.id, files);
+        concern.attachments = saved.map(s => s.key);
+      }
+      await appendHistory(complaint, `Concern added: ${summary}`);
+      Data.upsertComplaint(complaint);
+      close();
+      showComplaintDetails(complaint);
+    });
+  }
+
+  function renderDetailsPlaceholder() {
+    const panel = qs('#panel-details');
+    if (!panel.classList.contains('active')) return;
+    const container = qs('#detailsContainer');
+    if (!container) return;
+    const has = container.getAttribute('data-has-complaint') === '1';
+    if (has) return;
+    container.innerHTML = `
+      <div class="card">
+        <div class="section-title">Complaint Details</div>
+        <div>Please Select or Add a Complaint</div>
+      </div>
+    `;
+  }
+
   async function main() {
     setupTabs();
     setupThemeToggle();
@@ -1115,6 +1182,12 @@
     bindGlobalActions();
     handleAddComplaint();
     renderAll();
+    // Ensure a modal root exists
+    if (!qs('#modalRoot')) {
+      const div = document.createElement('div');
+      div.id = 'modalRoot';
+      document.body.appendChild(div);
+    }
   }
 
   document.addEventListener("DOMContentLoaded", main);

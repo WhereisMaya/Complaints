@@ -69,3 +69,10 @@ input:checked + .slider:before { transform: translateX(18px); }
 .cal-day { border: 1px dashed var(--border); border-radius: 4px; min-height: 24px; text-align: center; color: var(--muted); }
 .cal-day.cal-hit { background: color-mix(in srgb, #f1c40f 28%, transparent); color: var(--text); border-style: solid; }
 
+/* modal */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: var(--elev); border: 1px solid var(--border); border-radius: 10px; width: min(720px, 96vw); max-height: 90vh; overflow: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px solid var(--border); }
+.modal-body { padding: 12px; }
+.modal-footer { padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
