@@ -14,6 +14,13 @@
     setTimeout(() => URL.revokeObjectURL(url), 500);
   };
 
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+
   async function loadInstitutions() {
     try {
       const res = await fetch('data/institutions.csv');
@@ -289,6 +296,25 @@
       for (const file of fileList) {
         const arrayBuffer = await file.arrayBuffer();
         const key = `${complaintId}/concerns/${concernId}/${file.name}`;
+        await new Promise((res, rej) => {
+          const putReq = store.put({ key, name: file.name, type: file.type, size: file.size, data: arrayBuffer });
+          putReq.onsuccess = () => res();
+          putReq.onerror = () => rej(putReq.error);
+        });
+        saved.push({ key, name: file.name, type: file.type, size: file.size });
+      }
+      await tx.done?.catch?.(() => {});
+      return saved;
+    },
+    async saveFilesForConcernResponse(complaintId, concernId, responseId, fileList) {
+      if (!fileList || !fileList.length) return [];
+      const db = this.idb || (await this._openIdb());
+      const tx = db.transaction("files", "readwrite");
+      const store = tx.objectStore("files");
+      const saved = [];
+      for (const file of fileList) {
+        const arrayBuffer = await file.arrayBuffer();
+        const key = `${complaintId}/concerns/${concernId}/responses/${responseId}/${file.name}`;
         await new Promise((res, rej) => {
           const putReq = store.put({ key, name: file.name, type: file.type, size: file.size, data: arrayBuffer });
           putReq.onsuccess = () => res();
@@ -580,6 +606,7 @@
           <div class="form-actions" style="margin-top:10px;">
             ${complaint.isPasswordProtected ? `<button class="btn" id="unlockBtn">Unlock</button>` : ""}
             <button class="btn secondary" id="editBtn">Edit</button>
+            <button class="btn" id="escalatePhsoBtn">Escalate to PHSO</button>
           </div>
         </div>
         <div class="card">
@@ -592,14 +619,27 @@
                   <div class="list-meta">Decision: ${cc.decisionMaker || "—"} • ${fmtDate(cc.responseDate) || ""}</div>
                   <div class="list-meta">Evidence URLs: ${((cc.evidence||[]).length ? (cc.evidence||[]).map(e => (((e||'').startsWith('http://')) || ((e||'').startsWith('https://'))) ? `<a href="${e}" target="_blank" rel="noopener">${e}</a>` : e).join(", ") : "—")}</div>
                   <div class="list-meta">Attachments: ${(cc.attachments||[]).length ? `${(cc.attachments||[]).length} file(s)` : "—"}</div>
+                  ${(Array.isArray(cc.notes) && cc.notes.length) ? `<div class=\"list-meta\"><strong>Notes</strong></div>` : ''}
+                  ${(Array.isArray(cc.notes) ? cc.notes : []).map(n => `<div class=\"list-meta\">• ${n.text || ''} ${(Array.isArray(n.urls)?n.urls:[]).map(u => u.startsWith('http')?`<a href=\"${u}\" target=\"_blank\" rel=\"noopener\">${u}</a>`:u).join(', ')}</div>`).join('')}
+                  ${(Array.isArray(cc.responses) && cc.responses.length) ? `<div class=\"section-title\" style=\"margin-top:8px;\">Responses</div>` : ''}
+                  ${(Array.isArray(cc.responses) ? cc.responses : []).map(r => `
+                    <div class=\"list-item\" style=\"margin-top:6px;\">
+                      <div>
+                        <div><strong>${fmtDate(r.date)||''}</strong> — ${r.decisionMaker || 'Response'}</div>
+                        <div class=\"list-meta\">${(r.urls||[]).map(u => u.startsWith('http')?`<a href=\"${u}\" target=\"_blank\" rel=\"noopener\">${u}</a>`:u).join(', ')}</div>
+                      </div>
+                      <div>${r.text || ''}</div>
+                      <div class=\"list-meta\">Attachments: ${(r.attachments||[]).length ? `${(r.attachments||[]).length} file(s)` : '—'}</div>
+                    </div>
+                  `).join('')}
                 </div>
                 <div>
                   <div>${cc.response || ""}</div>
-                  <div class="form-actions" style="margin-top:6px;">
-                    <button class="btn secondary" data-action="respond" data-id="${cc.id}">Respond</button>
-                    <button class="btn secondary" data-action="edit" data-id="${cc.id}">Edit</button>
+                  <div class="form-actions vertical-actions" style="margin-top:6px;">
+                    <button class="btn secondary" data-action="addresponse" data-id="${cc.id}">Add Response</button>
+                    <button class="btn secondary" data-action="edit" data-id="${cc.id}">Edit Concern</button>
                     <button class="btn secondary" data-action="delete" data-id="${cc.id}">Delete</button>
-                    <button class="btn secondary" data-action="addevidence" data-id="${cc.id}">Add URLs</button>
+                    <button class="btn secondary" data-action="addnote" data-id="${cc.id}">Add Note</button>
                     <button class="btn secondary" data-action="addfiles" data-id="${cc.id}">Add Files</button>
                   </div>
                 </div>
@@ -651,6 +691,15 @@
 
     const sarLink = qs("#openLinkedSar");
     if (sarLink && complaint.linkedSAR) sarLink.addEventListener("click", (e) => { e.preventDefault(); showLinkedSar(complaint.linkedSAR); });
+    const escalateBtn = qs('#escalatePhsoBtn');
+    if (escalateBtn) escalateBtn.addEventListener('click', async () => {
+      complaint.status = 'Escalated to PHSO';
+      complaint.escalationPath = Array.from(new Set([...(complaint.escalationPath||[]), 'Escalated to PHSO']));
+      await appendHistory(complaint, 'Escalated to PHSO');
+      Data.upsertComplaint(complaint);
+      await autoCreatePhsoCase(complaint);
+      showPhsoTab(complaint.id);
+    });
 
     const unlockBtn = qs("#unlockBtn");
     if (unlockBtn) unlockBtn.addEventListener("click", async () => {
@@ -667,7 +716,7 @@
 
     qs("#addConcernBtn").addEventListener("click", () => openConcernModal(complaint));
 
-    // Concern actions: respond/edit/delete/add URLs/add files
+    // Concern actions: add response/edit/delete/add note/add files
     const concernsEl = qs('#concernsList');
     concernsEl.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-action][data-id]');
@@ -677,27 +726,10 @@
       const idx = (complaint.concerns||[]).findIndex(x => x.id === cid);
       if (idx < 0) return;
       const cc = complaint.concerns[idx];
-      if (action === 'respond') {
-        const response = prompt('Response:', cc.response || '') || '';
-        const decisionMaker = prompt('Decision maker:', cc.decisionMaker || '') || '';
-        const responseDate = prompt('Response date (YYYY-MM-DD):', cc.responseDate || '') || '';
-        cc.response = response;
-        cc.decisionMaker = decisionMaker;
-        cc.responseDate = responseDate;
-        appendHistory(complaint, `Concern responded: ${cc.summary}`);
-        Data.upsertComplaint(complaint);
-        showComplaintDetails(complaint);
-      }
+      if (action === 'addresponse') { openResponseModal(complaint, cc); return; }
       if (action === 'edit') {
-        const summary = prompt('Concern summary:', cc.summary || '') || cc.summary || '';
-        const details = prompt('Details:', cc.details || '') || cc.details || '';
-        const evidence = prompt('Evidence filenames or URLs (comma-separated):', (cc.evidence||[]).join(', ')) || (cc.evidence||[]).join(', ');
-        cc.summary = summary;
-        cc.details = details;
-        cc.evidence = evidence ? evidence.split(',').map(s => s.trim()).filter(Boolean) : [];
-        appendHistory(complaint, `Concern updated: ${cc.summary}`);
-        Data.upsertComplaint(complaint);
-        showComplaintDetails(complaint);
+        openConcernModal(complaint, cc);
+        return;
       }
       if (action === 'delete') {
         if (!confirm('Delete this concern?')) return;
@@ -706,16 +738,7 @@
         Data.upsertComplaint(complaint);
         showComplaintDetails(complaint);
       }
-      if (action === 'addevidence') {
-        const urls = prompt('Add evidence URLs (comma-separated):', '') || '';
-        if (urls) {
-          const parts = urls.split(',').map(s => s.trim()).filter(Boolean);
-          cc.evidence = Array.from(new Set([...(cc.evidence||[]), ...parts]));
-          appendHistory(complaint, `Concern evidence URLs added: ${cc.summary}`);
-          Data.upsertComplaint(complaint);
-          showComplaintDetails(complaint);
-        }
-      }
+      if (action === 'addnote') { openNoteModal(complaint, cc); return; }
       if (action === 'addfiles') {
         const finput = document.createElement('input');
         finput.type = 'file';
@@ -808,6 +831,10 @@
       <div class="card">
         <div class="section-title">Submitted Evidence</div>
         <div class="stack" id="phsoEvidence"></div>
+        <div class="form-actions" style="margin-top:10px;">
+          <button class="btn" id="phsoExportBundleBtn">Export Bundle (JSON + files)</button>
+          <button class="btn secondary" id="phsoReportBtn">Download Report</button>
+        </div>
       </div>
     `;
     (async () => {
@@ -832,6 +859,57 @@
         setTimeout(() => URL.revokeObjectURL(url), 500);
       });
     })();
+
+    // Export bundle: compile complaint, concerns, responses, and file blobs (base64)
+    qs('#phsoExportBundleBtn').addEventListener('click', async () => {
+      const comp = Data.getComplaint(complaintId);
+      const bundle = { meta: { generatedAt: new Date().toISOString() }, complaint: comp, files: [] };
+      const allFileEntries = await Data.listFiles(complaintId);
+      for (const f of allFileEntries) {
+        const item = await Data.getFile(f.key);
+        if (!item) continue;
+        bundle.files.push({ key: f.key, name: f.name, type: f.type, size: f.size, base64: arrayBufferToBase64(item.data) });
+      }
+      downloadBlob(JSON.stringify(bundle, null, 2), `${complaintId}-bundle.json`);
+    });
+
+    // Report: simple text report covering complaint + concerns + responses + notes
+    qs('#phsoReportBtn').addEventListener('click', async () => {
+      const comp = Data.getComplaint(complaintId);
+      const lines = [];
+      lines.push(`# Complaint Report: ${comp.title}`);
+      lines.push(`ID: ${comp.id}`);
+      lines.push(`Institution: ${comp.institution}`);
+      lines.push(`Date Filed: ${comp.dateFiled}`);
+      lines.push(`Status: ${comp.status}`);
+      lines.push('');
+      lines.push('## Complaint Content');
+      lines.push(comp.complaintContent || '');
+      lines.push('');
+      lines.push('## Concerns');
+      (comp.concerns||[]).forEach((c, idx) => {
+        lines.push(`### Concern ${idx+1}: ${c.summary}`);
+        lines.push(c.details || '');
+        lines.push(`Decision Maker: ${c.decisionMaker||''}`);
+        lines.push(`Response Date: ${c.responseDate||''}`);
+        lines.push(`Evidence URLs: ${(c.evidence||[]).join(', ')}`);
+        lines.push('');
+        if (Array.isArray(c.notes) && c.notes.length) {
+          lines.push('Notes:');
+          c.notes.forEach(n => lines.push(`- ${n.date||''} ${n.text||''} ${(n.urls||[]).join(', ')}`));
+          lines.push('');
+        }
+        if (Array.isArray(c.responses) && c.responses.length) {
+          lines.push('Responses:');
+          c.responses.forEach(r => {
+            lines.push(`- ${r.date||''} ${r.decisionMaker||''}: ${r.text||''}`);
+            if ((r.urls||[]).length) lines.push(`  URLs: ${(r.urls||[]).join(', ')}`);
+          });
+          lines.push('');
+        }
+      });
+      downloadBlob(lines.join('\n'), `${complaintId}-report.txt`, 'text/plain');
+    });
   }
 
   async function autoCreatePhsoCase(complaint) {
@@ -1085,40 +1163,41 @@
     }
   }
 
-  function openConcernModal(complaint) {
+  function openConcernModal(complaint, existing) {
     const root = qs('#modalRoot');
     if (!root) return;
-    const id = Data.nextConcernId(complaint);
+    const isEdit = !!existing;
+    const id = isEdit ? existing.id : Data.nextConcernId(complaint);
     root.innerHTML = `
       <div class="modal-backdrop" id="concernModal">
         <div class="modal">
           <div class="modal-header">
-            <div class="section-title">Add Concern</div>
+            <div class="section-title">${isEdit ? 'Edit Concern' : 'Add Concern'}</div>
             <button class="btn secondary" id="concernCancel">Close</button>
           </div>
           <div class="modal-body">
             <div class="form">
               <div class="form-row">
-                <label>Summary<input id="concSummary" required /></label>
-                <label>Decision Maker<input id="concDecision" /></label>
+                <label>Summary<input id="concSummary" value="${isEdit ? (existing.summary||'').replace(/"/g,'&quot;') : ''}" required /></label>
+                <label>Decision Maker<input id="concDecision" value="${isEdit ? (existing.decisionMaker||'').replace(/"/g,'&quot;') : ''}" /></label>
               </div>
               <div class="form-row">
-                <label>Response Date<input id="concRespDate" type="date" /></label>
+                <label>Response Date<input id="concRespDate" type="date" value="${isEdit ? (existing.responseDate||'') : ''}" /></label>
               </div>
               <div class="form-row">
-                <label>Details<textarea id="concDetails" rows="4"></textarea></label>
+                <label>Details<textarea id="concDetails" rows="4">${isEdit ? (existing.details||'') : ''}</textarea></label>
               </div>
               <div class="form-row">
-                <label>Evidence URLs (comma-separated)<input id="concUrls" placeholder="https://..." /></label>
+                <label>Evidence URLs (comma-separated)<input id="concUrls" placeholder="https://..." value="${isEdit ? (Array.isArray(existing.evidence)?existing.evidence.join(', '):'') : ''}" /></label>
                 <label>Attach Files<input id="concFiles" type="file" multiple /></label>
               </div>
               <div class="form-row">
-                <label>Initial Response<textarea id="concResponse" rows="3"></textarea></label>
+                <label>Initial Response<textarea id="concResponse" rows="3">${isEdit ? (existing.response||'') : ''}</textarea></label>
               </div>
             </div>
           </div>
           <div class="modal-footer form-actions">
-            <button class="btn" id="concernSave">Save Concern</button>
+            <button class="btn" id="concernSave">${isEdit ? 'Save Changes' : 'Save Concern'}</button>
             <button class="btn secondary" id="concernCancel2">Cancel</button>
           </div>
         </div>
@@ -1138,14 +1217,121 @@
       const urls = (qs('#concUrls').value || '').split(',').map(s => s.trim()).filter(Boolean);
       const filesInput = qs('#concFiles');
       complaint.concerns = complaint.concerns || [];
-      const concern = { id, summary, details, evidence: urls, response, decisionMaker, responseDate, attachments: [] };
-      complaint.concerns.push(concern);
+      const concern = isEdit ? existing : { id, attachments: [], notes: [], responses: [] };
+      concern.summary = summary;
+      concern.details = details;
+      concern.decisionMaker = decisionMaker;
+      concern.responseDate = responseDate;
+      concern.response = response;
+      concern.evidence = urls;
+      if (!isEdit) complaint.concerns.push(concern);
       const files = filesInput && filesInput.files ? filesInput.files : [];
       if (files && files.length) {
         const saved = await Data.saveFilesForConcern(complaint.id, concern.id, files);
         concern.attachments = saved.map(s => s.key);
       }
-      await appendHistory(complaint, `Concern added: ${summary}`);
+      await appendHistory(complaint, isEdit ? `Concern updated: ${summary}` : `Concern added: ${summary}`);
+      Data.upsertComplaint(complaint);
+      close();
+      showComplaintDetails(complaint);
+    });
+  }
+
+  function openResponseModal(complaint, concern) {
+    const root = qs('#modalRoot');
+    if (!root) return;
+    const responseId = `${concern.id}-r${Math.random().toString(36).slice(2,7)}`;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="respModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">Add Response</div>
+            <button class="btn secondary" id="respCancel">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="form">
+              <div class="form-row">
+                <label>Date<input id="respDate" type="date" value="${new Date().toISOString().slice(0,10)}" /></label>
+                <label>Decision Maker<input id="respDecision" value="${(concern.decisionMaker||'').replace(/"/g,'&quot;')}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Response<textarea id="respText" rows="4"></textarea></label>
+              </div>
+              <div class="form-row">
+                <label>URLs (comma-separated)<input id="respUrls" placeholder="https://..." /></label>
+                <label>Attach Files<input id="respFiles" type="file" multiple /></label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="respSave">Save Response</button>
+            <button class="btn secondary" id="respCancel2">Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+    const close = () => { root.innerHTML = ''; };
+    qs('#respCancel').addEventListener('click', close);
+    qs('#respCancel2').addEventListener('click', close);
+    qs('#respModal').addEventListener('click', (e) => { if (e.target.id === 'respModal') close(); });
+    qs('#respSave').addEventListener('click', async () => {
+      const date = (qs('#respDate').value || '').trim();
+      const decisionMaker = (qs('#respDecision').value || '').trim();
+      const text = (qs('#respText').value || '').trim();
+      const urls = (qs('#respUrls').value || '').split(',').map(s => s.trim()).filter(Boolean);
+      concern.responses = Array.isArray(concern.responses) ? concern.responses : [];
+      const resp = { id: responseId, date, decisionMaker, text, urls, attachments: [] };
+      const filesInput = qs('#respFiles');
+      const files = filesInput && filesInput.files ? filesInput.files : [];
+      if (files && files.length) {
+        const saved = await Data.saveFilesForConcernResponse(complaint.id, concern.id, responseId, files);
+        resp.attachments = saved.map(s => s.key);
+      }
+      concern.responses.push(resp);
+      await appendHistory(complaint, `Response added to concern: ${concern.summary}`);
+      Data.upsertComplaint(complaint);
+      close();
+      showComplaintDetails(complaint);
+    });
+  }
+
+  function openNoteModal(complaint, concern) {
+    const root = qs('#modalRoot');
+    if (!root) return;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="noteModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">Add Note</div>
+            <button class="btn secondary" id="noteCancel">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="form">
+              <div class="form-row">
+                <label>Note<textarea id="noteText" rows="3"></textarea></label>
+              </div>
+              <div class="form-row">
+                <label>URLs (comma-separated)<input id="noteUrls" placeholder="https://..." /></label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="noteSave">Save Note</button>
+            <button class="btn secondary" id="noteCancel2">Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+    const close = () => { root.innerHTML = ''; };
+    qs('#noteCancel').addEventListener('click', close);
+    qs('#noteCancel2').addEventListener('click', close);
+    qs('#noteModal').addEventListener('click', (e) => { if (e.target.id === 'noteModal') close(); });
+    qs('#noteSave').addEventListener('click', async () => {
+      const text = (qs('#noteText').value || '').trim();
+      const urls = (qs('#noteUrls').value || '').split(',').map(s => s.trim()).filter(Boolean);
+      concern.notes = Array.isArray(concern.notes) ? concern.notes : [];
+      concern.notes.push({ text, urls, date: new Date().toISOString().slice(0,10) });
+      await appendHistory(complaint, `Note added to concern: ${concern.summary}`);
       Data.upsertComplaint(complaint);
       close();
       showComplaintDetails(complaint);
