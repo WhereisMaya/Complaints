@@ -553,7 +553,7 @@
     });
   }
 
-  function showComplaintDetails(complaint) {
+  async function showComplaintDetails(complaint) {
     // Switch to details tab
     qsa(".tab").forEach(btn => {
       const is = btn.dataset.tab === "details";
@@ -564,9 +564,8 @@
 
     const el = qs("#detailsContainer");
     const sarLabel = complaint.linkedSAR ? `Linked SAR: <a href="#" id="openLinkedSar">${complaint.linkedSAR}</a>` : "No linked SAR";
-    (async () => {
-      const auditOk = await verifyHistoryChain(complaint);
-      el.innerHTML = `
+    const auditOk = await verifyHistoryChain(complaint);
+    el.innerHTML = `
       <div class="grid">
         <div class="card">
           <div class="section-title">Overview</div>
@@ -620,13 +619,14 @@
           <div class="stack" id="attachmentsList"></div>
         </div>
       </div>
-      `;
-    })();
-    // Render attachments
-    (async () => {
-      const listEl = qs('#attachmentsList');
-      const files = await Data.listFiles(complaint.id);
-      if (!files.length) { listEl.innerHTML = '<div class="list-item"><div>No attachments</div></div>'; return; }
+    `;
+
+    // Render attachments now that the DOM is in place
+    const listEl = qs('#attachmentsList');
+    const files = await Data.listFiles(complaint.id);
+    if (!files.length) {
+      listEl.innerHTML = '<div class="list-item"><div>No attachments</div></div>';
+    } else {
       for (const f of files) {
         const row = document.createElement('div');
         row.className = 'list-item';
@@ -644,7 +644,7 @@
         a.href = url; a.download = item.name; a.click();
         setTimeout(() => URL.revokeObjectURL(url), 500);
       });
-    })();
+    }
 
     const sarLink = qs("#openLinkedSar");
     if (sarLink && complaint.linkedSAR) sarLink.addEventListener("click", (e) => { e.preventDefault(); showLinkedSar(complaint.linkedSAR); });
