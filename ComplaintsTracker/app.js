@@ -347,6 +347,7 @@
       if (tab === 'legal') renderLegalOverview();
       if (tab === 'all') renderComplaintsList();
       if (tab === 'dashboard') { computeMetrics(); renderSearch(); renderFilters(); }
+      if (tab === 'resources') renderResources();
     }));
   }
 
@@ -989,6 +990,7 @@
     populateInstitutionSelect();
     renderLegalOverview();
     renderCalendar();
+    renderResources();
   }
 
   function renderLegalOverview() {
@@ -1073,6 +1075,29 @@
         </div>
       `).join('');
     };
+  }
+
+  async function renderResources() {
+    const panel = qs('#panel-resources');
+    if (!panel.classList.contains('active')) return; // only render when visible
+    const container = qs('#resourcesContainer');
+    try {
+      const res = await fetch('documents/resource.txt', { cache: 'no-store' });
+      if (!res.ok) throw new Error('Missing resource.txt');
+      const text = await res.text();
+      const lines = text.split(/\r?\n/);
+      const nonEmpty = lines.map(l => l.trim()).filter(Boolean);
+      const urlLine = nonEmpty.find(l => l.startsWith('http://') || l.startsWith('https://')) || '';
+      const details = nonEmpty.filter(l => l !== urlLine);
+      const urlHtml = urlLine ? `<a href="${urlLine}" target="_blank" rel="noopener">${urlLine}</a>` : 'No URL provided';
+      const detailsHtml = details.length ? details.map(d => `<div class="list-item"><div>${d}</div></div>`).join('') : '<div class="list-item"><div>No details provided</div></div>';
+      container.innerHTML = `
+        <div class="list-item"><div><strong>Site URL</strong></div><div>${urlHtml}</div></div>
+        ${detailsHtml}
+      `;
+    } catch (e) {
+      container.innerHTML = '<div class="list-item"><div>resource.txt not found. Add one under documents/ to populate this section.</div></div>';
+    }
   }
 
   async function main() {
