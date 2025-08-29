@@ -41,6 +41,9 @@
     sars: "complaintsTracker.sars.v1",
     phso: "complaintsTracker.phso.v1",
     legal: "complaintsTracker.legal.v1",
+    accountability: "complaintsTracker.accountability.v1",
+    users: "complaintsTracker.users.v1",
+    session: "complaintsTracker.session.v1",
     theme: "complaintsTracker.theme.v1",
   };
 
@@ -139,6 +142,9 @@
     sars: [],
     phsoCases: [],
     legalCases: [],
+    accountability: [],
+    users: [],
+    session: { user: null },
     idb: null,
     async init() {
       // Load from localStorage, fallback to bundled JSON
@@ -146,12 +152,18 @@
       const lsSars = localStorage.getItem(STORAGE_KEYS.sars);
       const lsPhso = localStorage.getItem(STORAGE_KEYS.phso);
       const lsLegal = localStorage.getItem(STORAGE_KEYS.legal);
+      const lsAcc = localStorage.getItem(STORAGE_KEYS.accountability);
+      const lsUsers = localStorage.getItem(STORAGE_KEYS.users);
+      const lsSession = localStorage.getItem(STORAGE_KEYS.session);
       if (lsComplaints && lsSars) {
         try {
           this.complaints = JSON.parse(lsComplaints);
           this.sars = JSON.parse(lsSars);
           this.phsoCases = lsPhso ? JSON.parse(lsPhso) : [];
           this.legalCases = lsLegal ? JSON.parse(lsLegal) : [];
+          this.accountability = lsAcc ? JSON.parse(lsAcc) : [];
+          this.users = lsUsers ? JSON.parse(lsUsers) : [];
+          this.session = lsSession ? JSON.parse(lsSession) : { user: null };
         } catch {
           await this._loadFromFiles();
         }
@@ -198,6 +210,9 @@
       localStorage.setItem(STORAGE_KEYS.sars, JSON.stringify(this.sars));
       localStorage.setItem(STORAGE_KEYS.phso, JSON.stringify(this.phsoCases));
       localStorage.setItem(STORAGE_KEYS.legal, JSON.stringify(this.legalCases));
+      localStorage.setItem(STORAGE_KEYS.accountability, JSON.stringify(this.accountability));
+      localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(this.users));
+      localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(this.session));
     },
     async syncFromServer() {
       try {
@@ -371,6 +386,7 @@
       // Trigger per-tab renders when the tab becomes active
       if (tab === 'calendar') renderCalendar();
       if (tab === 'legal') renderLegalOverview();
+      if (tab === 'accountability') renderAccountability();
       if (tab === 'all') renderComplaintsList();
       if (tab === 'dashboard') { computeMetrics(); renderSearch(); renderFilters(); }
       if (tab === 'details') renderDetailsPlaceholder();
@@ -491,12 +507,66 @@
     const addr = qs('#institutionAddress');
     const mail = qs('#institutionEmail');
     const rows = await loadInstitutions();
-    sel.innerHTML = `<option value="">Select or type...</option>` + rows.map(r => `<option value="${r.name}" data-address="${r.address||''}" data-email="${r.email||''}">${r.name}</option>`).join('');
-    sel.addEventListener('change', () => {
-      const opt = sel.selectedOptions[0];
-      if (!opt) return;
-      addr.value = opt.getAttribute('data-address') || '';
-      mail.value = opt.getAttribute('data-email') || '';
+    const dl = qs('#institutionList');
+    if (dl) dl.innerHTML = rows.map(r => `<option value="${r.name}" data-address="${r.address||''}" data-email="${r.email||''}"></option>`).join('');
+    sel.addEventListener('input', () => {
+      const val = sel.value;
+      const match = rows.find(r => r.name === val);
+      if (match) { addr.value = match.address || ''; mail.value = match.email || ''; }
+    });
+    const addBtn = qs('#addInstitutionBtn');
+    if (addBtn) addBtn.onclick = () => openAddInstitutionModal(sel);
+  }
+
+  function openAddInstitutionModal(selectEl) {
+    const root = qs('#modalRoot'); if (!root) return;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="instModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">Add Institution</div>
+            <button class="btn secondary" id="instCancel">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="form">
+              <div class="form-row">
+                <label>Name<input id="instName" required /></label>
+                <label>Address<input id="instAddr" /></label>
+              </div>
+              <div class="form-row">
+                <label>Email<input id="instEmail" type="email" /></label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="instSave">Save</button>
+            <button class="btn secondary" id="instCancel2">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#instCancel').addEventListener('click', close);
+    qs('#instCancel2').addEventListener('click', close);
+    qs('#instModal').addEventListener('click', (e) => { if (e.target.id === 'instModal') close(); });
+    qs('#instSave').addEventListener('click', async () => {
+      const name = (qs('#instName').value||'').trim();
+      const address = (qs('#instAddr').value||'').trim();
+      const email = (qs('#instEmail').value||'').trim();
+      if (!name) { alert('Name required'); return; }
+      // Append to localStorage registry to persist locally
+      const option = document.createElement('option');
+      option.value = name; option.textContent = name; option.setAttribute('data-address', address); option.setAttribute('data-email', email);
+      selectEl.appendChild(option);
+      selectEl.value = name;
+      const addr = qs('#institutionAddress');
+      const mail = qs('#institutionEmail');
+      if (addr) addr.value = address;
+      if (mail) mail.value = email;
+      // Note: On static hosting we can't write to CSV; storing selection locally
+      const added = JSON.parse(localStorage.getItem('complaintsTracker.addedInstitutions')||'[]');
+      added.push({ name, address, email });
+      localStorage.setItem('complaintsTracker.addedInstitutions', JSON.stringify(added));
+      close();
     });
   }
 
@@ -607,6 +677,7 @@
             ${complaint.isPasswordProtected ? `<button class="btn" id="unlockBtn">Unlock</button>` : ""}
             <button class="btn secondary" id="editBtn">Edit</button>
             <button class="btn" id="escalatePhsoBtn">Escalate to PHSO</button>
+            <button class="btn secondary" id="accReferralBtn">Accountability Referral</button>
           </div>
         </div>
         <div class="card">
@@ -699,6 +770,21 @@
       Data.upsertComplaint(complaint);
       await autoCreatePhsoCase(complaint);
       showPhsoTab(complaint.id);
+    });
+    const accBtn = qs('#accReferralBtn');
+    if (accBtn) accBtn.addEventListener('click', () => {
+      if (!requireLogin()) return;
+      const subject = complaint.contactPerson || complaint.institution || 'Unnamed Subject';
+      const organisation = complaint.institution || '';
+      const status = 'Open';
+      const entry = { id: `subj_${Math.random().toString(36).slice(2,7)}`, subject, role: 'Contact/Institution', organisation, status, allegations: '', harm: [], evidence: [], dates: [complaint.dateFiled].filter(Boolean), linkedComplaints: [complaint.id] };
+      Data.accountability.push(entry);
+      Data.save();
+      alert('Referred to Accountability. You can add details and charges there.');
+      qsa('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === 'accountability'));
+      qsa('.panel').forEach(p => p.classList.remove('active'));
+      qs('#panel-accountability').classList.add('active');
+      renderAccountability();
     });
 
     const unlockBtn = qs("#unlockBtn");
@@ -1051,6 +1137,7 @@
     populateLinkedSarSelect();
     populateInstitutionSelect();
     renderLegalOverview();
+    renderAccountability();
     renderCalendar();
     renderDetailsPlaceholder();
     renderResources();
@@ -1070,6 +1157,223 @@
       if (!btn) return;
       showLegalTab(btn.getAttribute('data-cid'));
     }, { once: true });
+  }
+
+  // Simple local auth (demo): admin login and per-user sessions
+  function setupSecureLogin() {
+    const secureLoginBtn = qs('#secureLoginBtn');
+    const logoutBtn = qs('#logoutBtn');
+    const updateUi = () => {
+      const logged = !!(Data.session && Data.session.user);
+      if (logoutBtn) logoutBtn.style.display = logged ? '' : 'none';
+    };
+    if (secureLoginBtn) secureLoginBtn.addEventListener('click', async () => {
+      const mode = prompt('Type "login" to login, or "signup" to create a user:');
+      if (!mode) return;
+      if (mode.toLowerCase() === 'signup') {
+        const username = prompt('Choose a username:');
+        const password = prompt('Choose a password:');
+        if (!username || !password) return;
+        if (Data.users.find(u => u.username === username)) { alert('User exists'); return; }
+        Data.users.push({ username, password, createdAt: new Date().toISOString() });
+        Data.save();
+        alert('User created. Now login.');
+      } else {
+        const username = prompt('Username (admin for admin login):');
+        let password = prompt('Password:');
+        if (!username || !password) return;
+        // Admin bypass
+        if (username === 'admin' && password === 'admin123') {
+          Data.session.user = { username: 'admin', role: 'admin' };
+          Data.save(); updateUi(); alert('Logged in as admin'); return;
+        }
+        const user = Data.users.find(u => u.username === username && u.password === password);
+        if (!user) { alert('Invalid credentials'); return; }
+        Data.session.user = { username, role: 'user' };
+        Data.save(); updateUi(); alert('Logged in');
+      }
+    });
+    if (logoutBtn) logoutBtn.addEventListener('click', () => { Data.session.user = null; Data.save(); updateUi(); alert('Logged out'); });
+    updateUi();
+  }
+
+  function requireLogin() {
+    if (!(Data.session && Data.session.user)) { alert('Login required to access this area.'); return false; }
+    return true;
+  }
+
+  // Accountability: subjects (individual/institution), role, org, allegations, harm, evidence, incident dates, linked cases, status
+  function renderAccountability() {
+    const panel = qs('#panel-accountability');
+    if (!panel.classList.contains('active')) return;
+    const container = qs('#accountabilityContainer');
+    const list = Data.accountability || [];
+    const rows = list.map(s => `
+      <div class="list-item">
+        <div>
+          <div><strong>${s.subject}</strong> — ${s.role||''} @ ${s.organisation||''}</div>
+          <div class="list-meta">Status: ${s.status||'Open'} • Harm: ${(s.harm||[]).join(', ')}</div>
+        </div>
+        <div class="list-actions">
+          <button class="btn secondary" data-action="open" data-id="${s.id}">Open</button>
+        </div>
+      </div>
+    `).join('') || '<div class="list-item"><div>No accountability subjects</div></div>';
+    container.innerHTML = `
+      <div class="list-header">
+        <div>Subjects</div>
+        <div class="list-actions">
+          <button class="btn secondary" id="accAddBtn">+ Add Entry</button>
+          <button class="btn secondary" id="accExportBtn">Master Report Export</button>
+        </div>
+      </div>
+      <div class="list">${rows}</div>
+    `;
+    container.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      if (!requireLogin()) return;
+      const id = btn.getAttribute('data-id');
+      const action = btn.getAttribute('data-action');
+      if (action === 'open' && id) openAccountabilityDetail(id);
+    }, { once: true });
+    qs('#accAddBtn')?.addEventListener('click', () => { if (!requireLogin()) return; openAccountabilityModal(); });
+    qs('#accExportBtn')?.addEventListener('click', () => { if (!requireLogin()) return; exportAccountabilityMaster(); });
+  }
+
+  function openAccountabilityModal(existing) {
+    const root = qs('#modalRoot'); if (!root) return;
+    const isEdit = !!existing;
+    const id = isEdit ? existing.id : `subj_${Math.random().toString(36).slice(2,7)}`;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="accModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">${isEdit ? 'Edit Subject' : 'Add Subject'}</div>
+            <button class="btn secondary" id="accCancel">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="form">
+              <div class="form-row">
+                <label>Subject<input id="accSubject" value="${isEdit?(existing.subject||'').replace(/"/g,'&quot;'):''}" required /></label>
+                <label>Role<input id="accRole" value="${isEdit?(existing.role||'').replace(/"/g,'&quot;'):''}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Organisation<input id="accOrg" value="${isEdit?(existing.organisation||'').replace(/"/g,'&quot;'):''}" /></label>
+                <label>Status<input id="accStatus" value="${isEdit?(existing.status||'Open').replace(/"/g,'&quot;'):'Open'}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Allegations<textarea id="accAllegations" rows="3">${isEdit?(existing.allegations||''):''}</textarea></label>
+              </div>
+              <div class="form-row">
+                <label>Harm Tags (comma-separated)<input id="accHarm" value="${isEdit?(Array.isArray(existing.harm)?existing.harm.join(', '):''):''}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Evidence URLs (comma-separated)<input id="accUrls" value="${isEdit?(Array.isArray(existing.evidence)?existing.evidence.join(', '):''):''}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Date(s) of Incident<input id="accDates" placeholder="YYYY-MM-DD; YYYY-MM-DD" value="${isEdit?(Array.isArray(existing.dates)?existing.dates.join('; '):''):''}" /></label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="accSave">${isEdit?'Save Changes':'Save Entry'}</button>
+            <button class="btn secondary" id="accCancel2">Cancel</button>
+          </div>
+        </div>
+      </div>
+    `;
+    const close = () => { root.innerHTML = ''; };
+    qs('#accCancel').addEventListener('click', close);
+    qs('#accCancel2').addEventListener('click', close);
+    qs('#accModal').addEventListener('click', (e) => { if (e.target.id === 'accModal') close(); });
+    qs('#accSave').addEventListener('click', () => {
+      if (!requireLogin()) return;
+      const subject = (qs('#accSubject').value||'').trim(); if (!subject) { alert('Subject required'); return; }
+      const role = (qs('#accRole').value||'').trim();
+      const organisation = (qs('#accOrg').value||'').trim();
+      const status = (qs('#accStatus').value||'Open').trim();
+      const allegations = (qs('#accAllegations').value||'').trim();
+      const harm = (qs('#accHarm').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+      const evidence = (qs('#accUrls').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+      const dates = (qs('#accDates').value||'').split(';').map(s=>s.trim()).filter(Boolean);
+      const entry = isEdit ? existing : { id };
+      Object.assign(entry, { subject, role, organisation, status, allegations, harm, evidence, dates, linkedComplaints: [] });
+      if (!isEdit) Data.accountability.push(entry);
+      Data.save(); close(); renderAccountability();
+    });
+  }
+
+  function openAccountabilityDetail(id) {
+    const s = Data.accountability.find(x => x.id === id);
+    if (!s) return;
+    const root = qs('#modalRoot'); if (!root) return;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="accDetModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">${s.subject}</div>
+            <button class="btn secondary" id="accDetClose">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="stack">
+              <div class="list-item"><div><strong>Role</strong></div><div>${s.role||''}</div></div>
+              <div class="list-item"><div><strong>Organisation</strong></div><div>${s.organisation||''}</div></div>
+              <div class="list-item"><div><strong>Status</strong></div><div>${s.status||'Open'}</div></div>
+              <div class="list-item"><div><strong>Allegations</strong></div><div>${s.allegations||''}</div></div>
+              <div class="list-item"><div><strong>Harm</strong></div><div>${(s.harm||[]).join(', ')}</div></div>
+              <div class="list-item"><div><strong>Evidence</strong></div><div>${(s.evidence||[]).map(u => u.startsWith('http')?`<a href="${u}" target="_blank" rel="noopener">${u}</a>`:u).join(', ')}</div></div>
+              <div class="list-item"><div><strong>Dates</strong></div><div>${(s.dates||[]).join('; ')}</div></div>
+              <div class="list-item"><div><strong>Linked Complaints</strong></div><div>${(s.linkedComplaints||[]).join(', ')||'—'}</div></div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="accGenReport">Generate Report</button>
+            <button class="btn secondary" id="accEdit">Edit</button>
+          </div>
+        </div>
+      </div>
+    `;
+    const close = () => { root.innerHTML = ''; };
+    qs('#accDetClose').addEventListener('click', close);
+    qs('#accGenReport').addEventListener('click', () => {
+      const lines = [];
+      lines.push(`# Subject Report: ${s.subject}`);
+      lines.push(`Role: ${s.role||''}`);
+      lines.push(`Organisation: ${s.organisation||''}`);
+      lines.push(`Status: ${s.status||'Open'}`);
+      lines.push('');
+      lines.push('Allegations:');
+      lines.push(s.allegations||'');
+      lines.push('');
+      lines.push(`Harm: ${(s.harm||[]).join(', ')}`);
+      lines.push(`Evidence: ${(s.evidence||[]).join(', ')}`);
+      lines.push(`Dates: ${(s.dates||[]).join('; ')}`);
+      lines.push(`Linked Complaints: ${(s.linkedComplaints||[]).join(', ')}`);
+      downloadBlob(lines.join('\n'), `${s.id}-report.txt`, 'text/plain');
+    });
+    qs('#accEdit').addEventListener('click', () => { const existing = Data.accountability.find(x => x.id === id); close(); openAccountabilityModal(existing); });
+  }
+
+  function exportAccountabilityMaster() {
+    const grouped = {};
+    for (const s of (Data.accountability||[])) {
+      const key = s.organisation || 'Unspecified';
+      grouped[key] = grouped[key] || [];
+      grouped[key].push(s);
+    }
+    const lines = [];
+    lines.push('# Master Accountability Report');
+    lines.push(`Generated: ${new Date().toISOString()}`);
+    lines.push('');
+    Object.keys(grouped).sort().forEach(org => {
+      lines.push(`## ${org}`);
+      grouped[org].forEach(s => {
+        lines.push(`- ${s.subject} — ${s.role||''} [${s.status||'Open'}] Harm: ${(s.harm||[]).join(', ')}`);
+      });
+      lines.push('');
+    });
+    downloadBlob(lines.join('\n'), `accountability-master-report.txt`, 'text/plain');
   }
 
   function renderCalendar() {
@@ -1161,6 +1465,21 @@
     } catch (e) {
       container.innerHTML = '<div class="list-item"><div>resource.txt not found. Add one under documents/ to populate this section.</div></div>';
     }
+  }
+
+  // Inject demo-only items when logged out (not saved back to disk). Hidden after login.
+  function injectDemoData() {
+    try {
+      // Accountability demo entries
+      if (!Array.isArray(Data.accountability) || !Data.accountability.length) {
+        Data.accountability = [
+          { id: 'subj_demo1', subject: 'Sarah Matthews', role: 'Director', organisation: 'PSA', status: 'Open', allegations: 'Systemic denial of care; failure to act', harm: ['denial of care'], evidence: ['https://example.org/evidence-1'], dates: ['2025-07-02'], linkedComplaints: ['cmp_001'] },
+          { id: 'subj_demo2', subject: 'Paul Philip', role: 'Chief Executive', organisation: 'GMC', status: 'Open', allegations: 'Negligence in oversight duties', harm: ['outing','harassment'], evidence: [], dates: [], linkedComplaints: ['cmp_001'] }
+        ];
+      }
+      // Render without persisting session-bound demo to localStorage (leave Data.save untouched here)
+      renderAccountability();
+    } catch {}
   }
 
   function openConcernModal(complaint, existing) {
@@ -1367,12 +1686,17 @@
     } catch {}
     bindGlobalActions();
     handleAddComplaint();
+    setupSecureLogin();
     renderAll();
     // Ensure a modal root exists
     if (!qs('#modalRoot')) {
       const div = document.createElement('div');
       div.id = 'modalRoot';
       document.body.appendChild(div);
+    }
+    // Load demo data into UI when logged out
+    if (!(Data.session && Data.session.user)) {
+      injectDemoData();
     }
   }
 

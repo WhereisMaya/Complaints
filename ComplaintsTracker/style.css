@@ -15,7 +15,7 @@ h1 { font-size: 18px; margin: 0; }
 .tab[data-tab="details"]:not(.active) { color: #f1c40f; }
 .tab[data-tab="linked-sar"]:not(.active) { color: #e67e22; }
 .tab[data-tab="phso"]:not(.active) { color: #9b59b6; }
-.tab[data-tab="legal"]:not(.active) { color: #3498db; }
+.tab[data-tab="accountability"]:not(.active) { color: #3498db; }
 .tab[data-tab="calendar"]:not(.active) { color: #1abc9c; }
 .tab[data-tab="resources"]:not(.active) { color: #ff1493; }
 main { padding: 16px; }

@@ -22,7 +22,9 @@
       <label class="chip" style="margin-right:8px;">
         <input type="checkbox" id="serverModeToggle" /> Server Mode
       </label>
-      <button id="loginBtn" class="btn secondary">Login</button>
+      <button id="secureLoginBtn" class="btn secondary">Secure Login</button>
+      <button id="logoutBtn" class="btn secondary" style="display:none;">Logout</button>
+      <button id="loginBtn" class="btn secondary">API Login</button>
       <button id="exportJsonBtn" class="btn">Export JSON</button>
       <button id="downloadTestBtn" class="btn secondary">Download Test JSON</button>
       <input type="file" id="importFileInput" accept="application/json" style="display:none" />
@@ -38,7 +40,7 @@
     <button class="tab" data-tab="details" role="tab" aria-selected="false">Complaint Details</button>
     <button class="tab" data-tab="linked-sar" role="tab" aria-selected="false">Linked SAR</button>
     <button class="tab" data-tab="phso" role="tab" aria-selected="false">PHSO</button>
-    <button class="tab" data-tab="legal" role="tab" aria-selected="false">Legal</button>
+    <button class="tab" data-tab="accountability" role="tab" aria-selected="false">⚖️ Accountability</button>
     <button class="tab" data-tab="calendar" role="tab" aria-selected="false">Calendar</button>
     <button class="tab" data-tab="resources" role="tab" aria-selected="false">Resources</button>
   </nav>
@@ -76,7 +78,11 @@
           <label>Date Filed<input name="dateFiled" type="date" required /></label>
         </div>
         <div class="form-row">
-          <label>Institution<select name="institution" id="institutionSelect" required><option value="">Select or type...</option></select></label>
+          <label>Institution<input name="institution" id="institutionSelect" list="institutionList" placeholder="Select or type..." required /></label>
+          <datalist id="institutionList"></datalist>
+          <div style="display:flex; align-items:end;">
+            <button type="button" id="addInstitutionBtn" class="btn secondary">Add Institution</button>
+          </div>
           <label>Contact Person<input name="contactPerson" id="contactPerson" /></label>
         </div>
         <div class="form-row">
@@ -116,8 +122,9 @@
       <div id="phsoContainer"></div>
     </section>
 
-    <section id="panel-legal" class="panel" role="tabpanel">
-      <div id="legalContainer"></div>
+    <section id="panel-accountability" class="panel" role="tabpanel">
+      <div class="card"><div class="section-title">⚖️ Accountability (Named Individuals & Institutions)</div></div>
+      <div id="accountabilityContainer"></div>
     </section>
 
     <section id="panel-calendar" class="panel" role="tabpanel">
