@@ -676,6 +676,8 @@
           <div class="form-actions" style="margin-top:10px;">
             ${complaint.isPasswordProtected ? `<button class="btn" id="unlockBtn">Unlock</button>` : ""}
             <button class="btn secondary" id="editBtn">Edit</button>
+          </div>
+          <div class="form-actions" style="margin-top:8px;">
             <button class="btn" id="escalatePhsoBtn">Escalate to PHSO</button>
             <button class="btn secondary" id="accReferralBtn">Accountability Referral</button>
           </div>
