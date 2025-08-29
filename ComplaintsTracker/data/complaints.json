@@ -1,0 +1,81 @@
+[
+  {
+    "id": "cmp_001",
+    "title": "Complaint to GMC re: Dr James Barrett",
+    "dateFiled": "2025-08-01",
+    "institution": "GMC",
+    "contactPerson": "Peter Keane",
+    "complaintContent": "Misuse of authority and systemic refusal of healthcare",
+    "linkedSAR": "sar_004",
+    "concerns": [
+      {
+        "id": "conc_001",
+        "summary": "Refusal of care despite diagnosis",
+        "details": "Barrett refused to accept the diagnosis of Russell Reid (2005) and subsequent letters from GP.",
+        "evidence": ["2005_Reid_Letter.pdf", "Barrett_Refusal_Audio.mp3"],
+        "response": "GMC stated Barrett unaware of Reid",
+        "decisionMaker": "Peter Keane",
+        "responseDate": "2025-08-14"
+      }
+    ],
+    "status": "Escalated to PHSO",
+    "escalationPath": ["Filed", "Ignored", "Escalated to PHSO"],
+    "isPasswordProtected": true,
+    "passwordHint": "Favourite boardgame",
+    "attachments": ["GMC_Refusal.pdf"],
+    "history": [
+      {"date": "2025-08-01", "event": "Complaint filed"},
+      {"date": "2025-08-14", "event": "GMC responded"},
+      {"date": "2025-08-21", "event": "Escalated to PHSO"}
+    ]
+  },
+  {
+    "id": "cmp_002",
+    "title": "Complaint to NHS Trust about appointment delays",
+    "dateFiled": "2025-07-15",
+    "institution": "NHS",
+    "contactPerson": "Complaints Team",
+    "complaintContent": "Repeated cancellations of appointments without explanation",
+    "linkedSAR": null,
+    "concerns": [
+      {
+        "id": "conc_002",
+        "summary": "Three cancellations in two months",
+        "details": "Appointments on 2025-05-05, 2025-06-02, and 2025-07-01 were cancelled last minute.",
+        "evidence": ["emails_thread.pdf"],
+        "response": "Trust apologized and promised review",
+        "decisionMaker": "Complaints Officer",
+        "responseDate": "2025-07-20"
+      }
+    ],
+    "status": "In Progress",
+    "escalationPath": ["Filed", "In Progress"],
+    "isPasswordProtected": false,
+    "passwordHint": "",
+    "attachments": ["timeline.xlsx"],
+    "history": [
+      {"date": "2025-07-15", "event": "Complaint filed"},
+      {"date": "2025-07-20", "event": "Trust responded"}
+    ]
+  },
+  {
+    "id": "cmp_003",
+    "title": "Complaint to ICO re: Data Sharing",
+    "dateFiled": "2025-06-05",
+    "institution": "ICO",
+    "contactPerson": "Case Officer",
+    "complaintContent": "Unauthorised sharing of medical data with third party",
+    "linkedSAR": "sar_001",
+    "concerns": [],
+    "status": "Legal Action", 
+    "escalationPath": ["Filed", "Ignored", "Legal Action"],
+    "isPasswordProtected": false,
+    "passwordHint": "",
+    "attachments": [],
+    "history": [
+      {"date": "2025-06-05", "event": "Complaint filed"},
+      {"date": "2025-06-30", "event": "No response"}
+    ]
+  }
+]
+

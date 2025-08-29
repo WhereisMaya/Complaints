@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Complaints Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="../SAR/favicon.ico" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="description" content="Standalone Complaints Tracker - log, track, export complaints." />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Complaints Tracker</h1>
+    <div class="theme-toggle">
+      <label class="switch">
+        <input type="checkbox" id="themeToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="header-actions">
+      <label class="chip" style="margin-right:8px;">
+        <input type="checkbox" id="serverModeToggle" /> Server Mode
+      </label>
+      <button id="loginBtn" class="btn secondary">Login</button>
+      <button id="exportJsonBtn" class="btn">Export JSON</button>
+      <button id="downloadTestBtn" class="btn secondary">Download Test JSON</button>
+      <input type="file" id="importFileInput" accept="application/json" style="display:none" />
+      <button id="importJsonBtn" class="btn secondary">Upload JSON</button>
+      <button id="printPdfBtn" class="btn">Print PDF</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Primary">
+    <button class="tab active" data-tab="dashboard" role="tab" aria-selected="true">Dashboard</button>
+    <button class="tab" data-tab="all" role="tab" aria-selected="false">All Complaints</button>
+    <button class="tab" data-tab="add" role="tab" aria-selected="false">Add Complaint</button>
+    <button class="tab" data-tab="details" role="tab" aria-selected="false">Complaint Details</button>
+    <button class="tab" data-tab="linked-sar" role="tab" aria-selected="false">Linked SAR</button>
+    <button class="tab" data-tab="phso" role="tab" aria-selected="false">PHSO</button>
+    <button class="tab" data-tab="legal" role="tab" aria-selected="false">Legal</button>
+    <button class="tab" data-tab="calendar" role="tab" aria-selected="false">Calendar</button>
+    <button class="tab" data-tab="resources" role="tab" aria-selected="false">Resources</button>
+  </nav>
+
+  <main>
+    <section id="panel-dashboard" class="panel active" role="tabpanel">
+      <div class="cards">
+        <div class="card"><div class="card-metric" id="metricTotal">0</div><div class="card-label">Total Complaints</div></div>
+        <div class="card"><div class="card-metric" id="metricUnresolved">0</div><div class="card-label">Unresolved</div></div>
+        <div class="card"><div class="card-metric" id="metricEscalated">0</div><div class="card-label">Escalated</div></div>
+      </div>
+      <div class="quick-actions">
+        <input id="searchInput" class="input" placeholder="Search by keyword..." />
+        <select id="filterInstitution" class="input"></select>
+        <select id="filterStatus" class="input"></select>
+        <button id="clearFiltersBtn" class="btn secondary">Clear</button>
+      </div>
+      <div id="searchResults" class="list"></div>
+    </section>
+
+    <section id="panel-all" class="panel" role="tabpanel">
+      <div class="list-header">
+        <div>Complaints</div>
+        <div class="list-actions">
+          <button id="refreshBtn" class="btn secondary">Refresh</button>
+        </div>
+      </div>
+      <div id="complaintsList" class="list"></div>
+    </section>
+
+    <section id="panel-add" class="panel" role="tabpanel">
+      <form id="complaintForm" class="form">
+        <div class="form-row">
+          <label>Title<input name="title" required /></label>
+          <label>Date Filed<input name="dateFiled" type="date" required /></label>
+        </div>
+        <div class="form-row">
+          <label>Institution<select name="institution" id="institutionSelect" required><option value="">Select or type...</option></select></label>
+          <label>Contact Person<input name="contactPerson" id="contactPerson" /></label>
+        </div>
+        <div class="form-row">
+          <label>Institution Address<input name="institutionAddress" id="institutionAddress" placeholder="Auto-filled when institution selected" /></label>
+          <label>Institution Email<input name="institutionEmail" id="institutionEmail" type="email" placeholder="Auto-filled when institution selected" /></label>
+        </div>
+        <div class="form-row">
+          <label>Complaint Content<textarea name="complaintContent" rows="4" required></textarea></label>
+        </div>
+        <div class="form-row">
+          <label>Linked SAR<select name="linkedSAR" id="linkedSarSelect"><option value="">None</option></select></label>
+          <label>Status<input name="status" placeholder="Filed / In Progress / Escalated..." /></label>
+        </div>
+        <div class="form-row">
+          <label>Password Protect?<input name="isPasswordProtected" type="checkbox" /></label>
+          <label>Password Hint<input name="passwordHint" placeholder="Optional hint" /></label>
+        </div>
+        <div class="form-row">
+          <label>Attachments<input name="attachments" id="attachmentsInput" type="file" multiple /></label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn">Save Complaint</button>
+          <button type="reset" class="btn secondary">Reset</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="panel-details" class="panel" role="tabpanel">
+      <div id="detailsContainer"></div>
+    </section>
+
+    <section id="panel-linked-sar" class="panel" role="tabpanel">
+      <div id="linkedSarContainer"></div>
+    </section>
+
+    <section id="panel-phso" class="panel" role="tabpanel">
+      <div id="phsoContainer"></div>
+    </section>
+
+    <section id="panel-legal" class="panel" role="tabpanel">
+      <div id="legalContainer"></div>
+    </section>
+
+    <section id="panel-calendar" class="panel" role="tabpanel">
+      <div id="calendarContainer"></div>
+    </section>
+
+    <section id="panel-resources" class="panel" role="tabpanel">
+      <div class="card">
+        <div class="section-title">Resources</div>
+        <div class="list" id="resourcesContainer">
+          <div class="list-item"><div>Use this area to store links, templates, policies, contacts, and guidance.</div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <div>Standalone but integrates with SAR Tracker | Local-first JSON store</div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+<!-- Built for clarity, extensibility, and legal-grade integrity. -->
+</html>
+
