@@ -1167,34 +1167,87 @@
       const logged = !!(Data.session && Data.session.user);
       if (logoutBtn) logoutBtn.style.display = logged ? '' : 'none';
     };
-    if (secureLoginBtn) secureLoginBtn.addEventListener('click', async () => {
-      const mode = prompt('Type "login" to login, or "signup" to create a user:');
-      if (!mode) return;
-      if (mode.toLowerCase() === 'signup') {
-        const username = prompt('Choose a username:');
-        const password = prompt('Choose a password:');
-        if (!username || !password) return;
-        if (Data.users.find(u => u.username === username)) { alert('User exists'); return; }
-        Data.users.push({ username, password, createdAt: new Date().toISOString() });
-        Data.save();
-        alert('User created. Now login.');
-      } else {
-        const username = prompt('Username (admin for admin login):');
-        let password = prompt('Password:');
-        if (!username || !password) return;
-        // Admin bypass
+    if (secureLoginBtn) secureLoginBtn.addEventListener('click', () => openAuthModal('login'));
+    if (logoutBtn) logoutBtn.addEventListener('click', () => {
+      Data.session.user = null; Data.save(); updateUi(); alert('Logged out');
+      renderAll();
+      if (!(Data.session && Data.session.user)) injectDemoData();
+    });
+    updateUi();
+  }
+
+  function openAuthModal(initialMode = 'login') {
+    const root = qs('#modalRoot'); if (!root) return;
+    let mode = initialMode; // 'login' | 'signup'
+    const render = () => {
+      root.innerHTML = `
+        <div class="modal-backdrop" id="authModal">
+          <div class="modal">
+            <div class="modal-header">
+              <div class="section-title">Secure ${mode === 'login' ? 'Login' : 'Sign Up'}</div>
+              <div class="form-actions">
+                <button class="btn secondary" id="switchToLogin">Login</button>
+                <button class="btn secondary" id="switchToSignup">Sign Up</button>
+                <button class="btn secondary" id="authClose">Close</button>
+              </div>
+            </div>
+            <div class="modal-body">
+              <div class="form">
+                <div class="form-row">
+                  <label>Username<input id="authUsername" placeholder="Username" /></label>
+                  <label>Password<input id="authPassword" type="password" placeholder="Password" /></label>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer form-actions">
+              <button class="btn" id="authPrimary">${mode === 'login' ? 'Login' : 'Create Account'}</button>
+              <button class="btn secondary" id="authCancel">Cancel</button>
+            </div>
+          </div>
+        </div>
+      `;
+      const close = () => { root.innerHTML = ''; };
+      qs('#authClose').addEventListener('click', close);
+      qs('#authCancel').addEventListener('click', close);
+      qs('#authModal').addEventListener('click', (e) => { if (e.target.id === 'authModal') close(); });
+      qs('#switchToLogin').addEventListener('click', () => { mode = 'login'; render(); });
+      qs('#switchToSignup').addEventListener('click', () => { mode = 'signup'; render(); });
+      qs('#authPrimary').addEventListener('click', async () => {
+        const username = (qs('#authUsername').value || '').trim();
+        const password = (qs('#authPassword').value || '').trim();
+        if (!username || !password) { alert('Enter username and password'); return; }
+        if (mode === 'signup') {
+          if (Data.users.find(u => u.username === username)) { alert('User exists'); return; }
+          Data.users.push({ username, password, createdAt: new Date().toISOString() });
+          Data.save(); alert('User created. You can login now.'); mode = 'login'; render(); return;
+        }
+        // login
         if (username === 'admin' && password === 'admin123') {
           Data.session.user = { username: 'admin', role: 'admin' };
-          Data.save(); updateUi(); alert('Logged in as admin'); return;
+          // Load bundled dataset for admin view and clear any demo-only in-memory data
+          try { await Data._loadFromFiles(); } catch {}
+          // Restore persisted accountability (demo was not saved)
+          try { Data.accountability = JSON.parse(localStorage.getItem(STORAGE_KEYS.accountability) || '[]'); } catch { Data.accountability = []; }
+          Data.save();
+          close();
+          // Switch to All Complaints and render
+          qsa('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === 'all'));
+          qsa('.panel').forEach(p => p.classList.remove('active'));
+          qs('#panel-all').classList.add('active');
+          renderAll();
+          alert('Logged in as admin');
+          return;
         }
         const user = Data.users.find(u => u.username === username && u.password === password);
         if (!user) { alert('Invalid credentials'); return; }
         Data.session.user = { username, role: 'user' };
-        Data.save(); updateUi(); alert('Logged in');
-      }
-    });
-    if (logoutBtn) logoutBtn.addEventListener('click', () => { Data.session.user = null; Data.save(); updateUi(); alert('Logged out'); });
-    updateUi();
+        Data.save();
+        close();
+        renderAll();
+        alert('Logged in');
+      });
+    };
+    render();
   }
 
   function requireLogin() {
