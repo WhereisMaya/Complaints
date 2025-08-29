@@ -1147,7 +1147,7 @@
 
   function renderLegalOverview() {
     const panel = qs('#panel-legal');
-    if (!panel.classList.contains('active')) return; // only render when visible
+    if (!panel || !panel.classList.contains('active')) return; // only render when visible and present
     const container = qs('#legalContainer');
     const items = Data.legalCases.map(l => {
       const c = Data.getComplaint(l.complaintId) || { title: l.complaintId };
@@ -1260,7 +1260,7 @@
   // Accountability: subjects (individual/institution), role, org, allegations, harm, evidence, incident dates, linked cases, status
   function renderAccountability() {
     const panel = qs('#panel-accountability');
-    if (!panel.classList.contains('active')) return;
+    if (!panel || !panel.classList.contains('active')) return;
     const container = qs('#accountabilityContainer');
     const list = Data.accountability || [];
     const rows = list.map(s => `
