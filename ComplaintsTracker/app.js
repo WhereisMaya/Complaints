@@ -151,6 +151,26 @@
       } else {
         await this._loadFromFiles();
       }
+      // Backfill audit hashes for existing history entries lacking hashes
+      try {
+        for (const c of this.complaints) {
+          const hist = Array.isArray(c.history) ? c.history : [];
+          let prev = "";
+          let mutated = false;
+          for (const h of hist) {
+            const expected = await sha256Hex(`${prev}|${h.date}|${h.event}`);
+            if (!h.hash || h.hash !== expected) {
+              h.hash = expected;
+              mutated = true;
+            }
+            prev = h.hash;
+          }
+          if (mutated) {
+            // ensure the complaint record is saved with updated hashes
+            // (upsert will call save later)
+          }
+        }
+      } catch {}
       await this._openIdb();
       this.save();
       // Post-init sync if server mode already enabled
@@ -299,6 +319,11 @@
       const tab = btn.dataset.tab;
       const panel = qs(`#panel-${tab}`);
       if (panel) panel.classList.add("active");
+      // Trigger per-tab renders when the tab becomes active
+      if (tab === 'calendar') renderCalendar();
+      if (tab === 'legal') renderLegalOverview();
+      if (tab === 'all') renderComplaintsList();
+      if (tab === 'dashboard') { computeMetrics(); renderSearch(); renderFilters(); }
     }));
   }
 
@@ -543,7 +568,14 @@
                   <div class="list-meta">Decision: ${cc.decisionMaker || "—"} • ${fmtDate(cc.responseDate) || ""}</div>
                   <div class="list-meta">Evidence: ${(cc.evidence||[]).join(", ") || "—"}</div>
                 </div>
-                <div>${cc.response || ""}</div>
+                <div>
+                  <div>${cc.response || ""}</div>
+                  <div class="form-actions" style="margin-top:6px;">
+                    <button class="btn secondary" data-action="respond" data-id="${cc.id}">Respond</button>
+                    <button class="btn secondary" data-action="edit" data-id="${cc.id}">Edit</button>
+                    <button class="btn secondary" data-action="delete" data-id="${cc.id}">Delete</button>
+                  </div>
+                </div>
               </div>
             `).join("")}
           </div>
@@ -622,6 +654,47 @@
       appendHistory(complaint, `Concern added: ${summary}`);
       Data.upsertComplaint(complaint);
       showComplaintDetails(complaint);
+    });
+
+    // Concern actions: respond/edit/delete
+    const concernsEl = qs('#concernsList');
+    concernsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action][data-id]');
+      if (!btn) return;
+      const action = btn.getAttribute('data-action');
+      const cid = btn.getAttribute('data-id');
+      const idx = (complaint.concerns||[]).findIndex(x => x.id === cid);
+      if (idx < 0) return;
+      const cc = complaint.concerns[idx];
+      if (action === 'respond') {
+        const response = prompt('Response:', cc.response || '') || '';
+        const decisionMaker = prompt('Decision maker:', cc.decisionMaker || '') || '';
+        const responseDate = prompt('Response date (YYYY-MM-DD):', cc.responseDate || '') || '';
+        cc.response = response;
+        cc.decisionMaker = decisionMaker;
+        cc.responseDate = responseDate;
+        appendHistory(complaint, `Concern responded: ${cc.summary}`);
+        Data.upsertComplaint(complaint);
+        showComplaintDetails(complaint);
+      }
+      if (action === 'edit') {
+        const summary = prompt('Concern summary:', cc.summary || '') || cc.summary || '';
+        const details = prompt('Details:', cc.details || '') || cc.details || '';
+        const evidence = prompt('Evidence filenames or URLs (comma-separated):', (cc.evidence||[]).join(', ')) || (cc.evidence||[]).join(', ');
+        cc.summary = summary;
+        cc.details = details;
+        cc.evidence = evidence ? evidence.split(',').map(s => s.trim()).filter(Boolean) : [];
+        appendHistory(complaint, `Concern updated: ${cc.summary}`);
+        Data.upsertComplaint(complaint);
+        showComplaintDetails(complaint);
+      }
+      if (action === 'delete') {
+        if (!confirm('Delete this concern?')) return;
+        complaint.concerns.splice(idx, 1);
+        appendHistory(complaint, `Concern deleted: ${cc.summary}`);
+        Data.upsertComplaint(complaint);
+        showComplaintDetails(complaint);
+      }
     });
 
     qs("#editBtn").addEventListener("click", () => {
@@ -899,7 +972,39 @@
         <div class="section-title">Year View (${year})</div>
         <div class="cal-year">${monthHtml}</div>
       </div>
+      <div class="card">
+        <div class="section-title">Events</div>
+        <div id="calEventsList" class="list"><div class="list-item"><div>Select a day to see events.</div></div></div>
+      </div>
     `;
+
+    // Day click → list events
+    container.onclick = (e) => {
+      const day = e.target.closest('.cal-day');
+      if (!day) return;
+      const title = day.getAttribute('title') || '';
+      const dateStr = title.split(' — ')[0];
+      const events = [];
+      Data.complaints.forEach(c => {
+        (c.history||[]).forEach(h => {
+          if (h.date === dateStr) events.push({ complaint: c, history: h });
+        });
+      });
+      const list = qs('#calEventsList');
+      if (!events.length) {
+        list.innerHTML = '<div class="list-item"><div>No events for this day.</div></div>';
+        return;
+      }
+      list.innerHTML = events.map(ev => `
+        <div class="list-item">
+          <div>
+            <div><strong>${ev.complaint.title}</strong></div>
+            <div class="list-meta">${ev.complaint.institution} • ID: <span class="mono">${ev.complaint.id}</span></div>
+          </div>
+          <div>${ev.history.event}</div>
+        </div>
+      `).join('');
+    };
   }
 
   async function main() {
