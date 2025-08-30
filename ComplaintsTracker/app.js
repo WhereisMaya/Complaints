@@ -146,15 +146,27 @@
     users: [],
     session: { user: null },
     idb: null,
+    key(nameConst) {
+      const user = (this.session && this.session.user && this.session.user.username) ? this.session.user.username : 'public';
+      return `${nameConst}:${user}`;
+    },
     async init() {
       // Load from localStorage, fallback to bundled JSON
-      const lsComplaints = localStorage.getItem(STORAGE_KEYS.complaints);
-      const lsSars = localStorage.getItem(STORAGE_KEYS.sars);
-      const lsPhso = localStorage.getItem(STORAGE_KEYS.phso);
-      const lsLegal = localStorage.getItem(STORAGE_KEYS.legal);
-      const lsAcc = localStorage.getItem(STORAGE_KEYS.accountability);
-      const lsUsers = localStorage.getItem(STORAGE_KEYS.users);
       const lsSession = localStorage.getItem(STORAGE_KEYS.session);
+      const lsUsers = localStorage.getItem(STORAGE_KEYS.users);
+      if (lsUsers) { try { this.users = JSON.parse(lsUsers); } catch { this.users = []; } }
+      this.session = lsSession ? JSON.parse(lsSession) : { user: null };
+      // default user seeding
+      try {
+        if (!this.users.find(u => u.username === 'AAAPPP')) {
+          this.users.push({ username: 'AAAPPP', password: 'AAA123', createdAt: new Date().toISOString() });
+        }
+      } catch {}
+      const lsComplaints = localStorage.getItem(this.key(STORAGE_KEYS.complaints));
+      const lsSars = localStorage.getItem(this.key(STORAGE_KEYS.sars));
+      const lsPhso = localStorage.getItem(this.key(STORAGE_KEYS.phso));
+      const lsLegal = localStorage.getItem(this.key(STORAGE_KEYS.legal));
+      const lsAcc = localStorage.getItem(this.key(STORAGE_KEYS.accountability));
       if (lsComplaints && lsSars) {
         try {
           this.complaints = JSON.parse(lsComplaints);
@@ -162,8 +174,6 @@
           this.phsoCases = lsPhso ? JSON.parse(lsPhso) : [];
           this.legalCases = lsLegal ? JSON.parse(lsLegal) : [];
           this.accountability = lsAcc ? JSON.parse(lsAcc) : [];
-          this.users = lsUsers ? JSON.parse(lsUsers) : [];
-          this.session = lsSession ? JSON.parse(lsSession) : { user: null };
         } catch {
           await this._loadFromFiles();
         }
@@ -197,6 +207,20 @@
         if (isServerMode()) await this.syncFromServer();
       } catch {}
     },
+    reloadForCurrentUser() {
+      try {
+        const lsC = localStorage.getItem(this.key(STORAGE_KEYS.complaints));
+        const lsS = localStorage.getItem(this.key(STORAGE_KEYS.sars));
+        const lsP = localStorage.getItem(this.key(STORAGE_KEYS.phso));
+        const lsL = localStorage.getItem(this.key(STORAGE_KEYS.legal));
+        const lsA = localStorage.getItem(this.key(STORAGE_KEYS.accountability));
+        this.complaints = lsC ? JSON.parse(lsC) : [];
+        this.sars = lsS ? JSON.parse(lsS) : [];
+        this.phsoCases = lsP ? JSON.parse(lsP) : [];
+        this.legalCases = lsL ? JSON.parse(lsL) : [];
+        this.accountability = lsA ? JSON.parse(lsA) : [];
+      } catch { this.complaints = []; this.sars = []; this.phsoCases = []; this.legalCases = []; this.accountability = []; }
+    },
     async _loadFromFiles() {
       const [complaintsRes, sarsRes] = await Promise.all([
         fetch("data/complaints.json"),
@@ -206,11 +230,11 @@
       this.sars = await sarsRes.json();
     },
     save() {
-      localStorage.setItem(STORAGE_KEYS.complaints, JSON.stringify(this.complaints));
-      localStorage.setItem(STORAGE_KEYS.sars, JSON.stringify(this.sars));
-      localStorage.setItem(STORAGE_KEYS.phso, JSON.stringify(this.phsoCases));
-      localStorage.setItem(STORAGE_KEYS.legal, JSON.stringify(this.legalCases));
-      localStorage.setItem(STORAGE_KEYS.accountability, JSON.stringify(this.accountability));
+      localStorage.setItem(this.key(STORAGE_KEYS.complaints), JSON.stringify(this.complaints));
+      localStorage.setItem(this.key(STORAGE_KEYS.sars), JSON.stringify(this.sars));
+      localStorage.setItem(this.key(STORAGE_KEYS.phso), JSON.stringify(this.phsoCases));
+      localStorage.setItem(this.key(STORAGE_KEYS.legal), JSON.stringify(this.legalCases));
+      localStorage.setItem(this.key(STORAGE_KEYS.accountability), JSON.stringify(this.accountability));
       localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(this.users));
       localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(this.session));
     },
@@ -2106,14 +2130,14 @@
           qsa('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === 'all'));
           qsa('.panel').forEach(p => p.classList.remove('active'));
           qs('#panel-all').classList.add('active');
-          renderAll();
+          Data.reloadForCurrentUser(); renderAll();
           alert('Logged in as admin');
           return;
         }
         const user = Data.users.find(u => u.username === username && u.password === password);
         if (!user) { alert('Invalid credentials'); return; }
         Data.session.user = { username, role: 'user' };
-        Data.save();
+        Data.save(); Data.reloadForCurrentUser();
         close();
         renderAll();
         alert('Logged in');
@@ -2663,10 +2687,20 @@
       }
       // Demo complaints (only if none loaded yet)
       if (!Array.isArray(Data.complaints) || !Data.complaints.length) {
-        Data.complaints = [
+        const base = [
           { id: 'cmp_001', title: 'Failure to respond to SAR', dateFiled: '2025-05-01', institution: 'Devon & Cornwall Police', contactPerson: 'PSD', complaintContent: 'No response received to SAR within statutory time.', linkedSAR: 'sar_001', concerns: [{ id:'conc_001', summary:'No monthly update', details:'Breach of agreed monthly contact', decisionMaker:'PSD', responseDate:'', evidence:['https://example.org/ref-1'], response:'', notes:[], attachments:[], responses:[] }], status: 'Filed', escalationPath: ['Filed'], isPasswordProtected: false, passwordHint:'', institutionAddress:'', institutionEmail:'', expectedResponseFrequency:'Monthly', lastResponseDate:'', agreedTerms:'Monthly update required', breachFlag:false, attachments:[], history: [] },
           { id: 'cmp_002', title: 'Complaint obstruction', dateFiled: '2025-06-10', institution: 'GMC', contactPerson: '', complaintContent: 'Refused to accept further complaints.', linkedSAR: '', concerns: [], status: 'Refused', escalationPath: ['Filed','Refused'], isPasswordProtected: false, passwordHint:'', institutionAddress:'', institutionEmail:'', expectedResponseFrequency:'', lastResponseDate:'', agreedTerms:'Agreed to accept further complaints', breachFlag:true, attachments:[], history: [] }
         ];
+        // If specific user AAAPPP, seed distinct set
+        const user = (Data.session && Data.session.user && Data.session.user.username) ? Data.session.user.username : 'public';
+        if (user === 'AAAPPP') {
+          Data.complaints = [
+            { id: 'cmp_A01', title: 'AAAPPP Test Police Case', type:'Police', dateFiled: '2025-07-01', institution: 'Met Police', contactPerson: '', complaintContent: 'Test complaint for AAAPPP.', linkedSAR: '', concerns: [], status: 'Filed', escalationPath:['Filed'], isPasswordProtected:false, passwordHint:'', institutionAddress:'', institutionEmail:'', expectedResponseFrequency:'Weekly', lastResponseDate:'', agreedTerms:'', breachFlag:false, attachments:[], history: [] }
+          ];
+          Data.sars = [{ id:'sar_A01', title:'AAAPPP SAR', institution:'Met Police', dateFiled:'2025-06-15', status:'Pending', summary:'AAAPPP SAR test' }];
+        } else {
+          Data.complaints = base;
+        }
       }
       // Demo SARs
       if (!Array.isArray(Data.sars) || !Data.sars.length) {
