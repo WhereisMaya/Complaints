@@ -12,9 +12,16 @@
 <body>
   <header class="app-header">
     <h1>Complaints Tracker</h1>
+    <button id="customizeBtn" class="btn secondary" style="margin-left:8px;">Custom</button>
     <div class="theme-toggle">
       <label class="switch">
         <input type="checkbox" id="themeToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="theme-toggle" title="Redact View (mask PII)">
+      <label class="switch">
+        <input type="checkbox" id="redactToggle">
         <span class="slider"></span>
       </label>
     </div>
@@ -28,7 +35,9 @@
       <input type="file" id="importFileInput" accept="application/json" style="display:none" />
       <button id="importJsonBtn" class="btn secondary">Load</button>
       <button id="exportJsonBtn" class="btn secondary">Save</button>
+      <button id="exportCsvBtn" class="btn secondary">Export CSV</button>
       <button id="downloadTestBtn" class="btn secondary">Template</button>
+      <button id="exportIcsBtn" class="btn secondary">Export iCal</button>
       <button id="printPdfBtn" class="btn">Print PDF</button>
     </div>
   </header>
@@ -42,6 +51,7 @@
     <button class="tab" data-tab="phso" role="tab" aria-selected="false">🏛️ PHSO</button>
     <button class="tab" data-tab="accountability" role="tab" aria-selected="false">⚖️ Accountability</button>
     <button class="tab" data-tab="calendar" role="tab" aria-selected="false">🗓️ Calendar</button>
+    <button class="tab" data-tab="institutions" role="tab" aria-selected="false">🏢 Institutions</button>
     <button class="tab" data-tab="resources" role="tab" aria-selected="false">🔗 Resources</button>
   </nav>
 
@@ -52,10 +62,22 @@
         <div class="card"><div class="card-metric" id="metricUnresolved">0</div><div class="card-label">Unresolved</div></div>
         <div class="card"><div class="card-metric" id="metricEscalated">0</div><div class="card-label">Escalated</div></div>
       </div>
+      <div class="card" id="warningsCard" style="display:none;">
+        <div class="section-title">Warnings</div>
+        <div id="warningsContainer" class="list"></div>
+      </div>
+      <div class="card" id="actionRequiredCard" style="display:none;">
+        <div class="section-title">Action Required</div>
+        <div id="actionRequiredContainer" class="list"></div>
+      </div>
       <div class="quick-actions">
-        <input id="searchInput" class="input" placeholder="Search by keyword..." />
+        <input id="searchInput" class="input" placeholder="Search by title, institution, status, date..." />
         <select id="filterInstitution" class="input"></select>
         <select id="filterStatus" class="input"></select>
+        <input id="filterDate" type="date" class="input" />
+        <select id="segmentSelect" class="input" title="Saved segments"></select>
+        <button id="segmentSaveBtn" class="btn secondary">Save Segment</button>
+        <button id="segmentDeleteBtn" class="btn secondary">Delete</button>
         <button id="clearFiltersBtn" class="btn secondary">Clear</button>
       </div>
       <div id="searchResults" class="list"></div>
@@ -66,6 +88,7 @@
         <div>Complaints</div>
         <div class="list-actions">
           <button id="refreshBtn" class="btn secondary">Refresh</button>
+          <button id="exportListCsvBtn" class="btn secondary">Export List CSV</button>
         </div>
       </div>
       <div id="complaintsList" class="list"></div>
@@ -90,6 +113,24 @@
           <label>Institution Email<input name="institutionEmail" id="institutionEmail" type="email" placeholder="Auto-filled when institution selected" /></label>
         </div>
         <div class="form-row">
+          <label>Date of Event<input name="eventDate" type="date" /></label>
+          <label>Refusal Date<input name="refusalDate" type="date" /></label>
+        </div>
+        <div class="form-row">
+          <label>Expected Response Frequency
+            <select name="expectedResponseFrequency">
+              <option value="">None</option>
+              <option>Weekly</option>
+              <option>Monthly</option>
+              <option>Quarterly</option>
+            </select>
+          </label>
+          <label>Last Response Date<input name="lastResponseDate" type="date" /></label>
+        </div>
+        <div class="form-row">
+          <label>Agreed Terms<textarea name="agreedTerms" rows="3" placeholder="e.g., Agreed to take further complaints"></textarea></label>
+        </div>
+        <div class="form-row">
           <label>Complaint Content<textarea name="complaintContent" rows="4" required></textarea></label>
         </div>
         <div class="form-row">
@@ -99,6 +140,9 @@
         <div class="form-row">
           <label>Password Protect?<input name="isPasswordProtected" type="checkbox" /></label>
           <label>Password Hint<input name="passwordHint" placeholder="Optional hint" /></label>
+        </div>
+        <div class="form-row">
+          <label>Breach Flag<input name="breachFlag" type="checkbox" /></label>
         </div>
         <div class="form-row">
           <label>Attachments<input name="attachments" id="attachmentsInput" type="file" multiple /></label>
@@ -124,7 +168,25 @@
 
     <section id="panel-accountability" class="panel" role="tabpanel">
       <div class="card"><div class="section-title">⚖️ Accountability (Named Individuals & Institutions)</div></div>
+      <div class="quick-actions">
+        <input id="accSearchInput" class="input" placeholder="Search subjects, organisations, charge type..." />
+        <button id="accClearBtn" class="btn secondary">Clear</button>
+      </div>
       <div id="accountabilityContainer"></div>
+    </section>
+
+    <section id="panel-institutions" class="panel" role="tabpanel">
+      <div class="card"><div class="section-title">🏢 Institutions</div></div>
+      <div class="quick-actions">
+        <input id="instSearchInput" class="input" placeholder="Search institutions..." />
+        <div class="list-actions" style="margin-left:auto; display:flex; gap:8px;">
+          <button id="instAddBtn" class="btn secondary">+ Add Institution</button>
+          <input type="file" id="instImportInput" accept="text/csv,.csv" style="display:none;" />
+          <button id="instImportBtn" class="btn secondary">Import CSV</button>
+          <button id="instExportBtn" class="btn secondary">Export CSV</button>
+        </div>
+      </div>
+      <div id="institutionsContainer"></div>
     </section>
 
     <section id="panel-calendar" class="panel" role="tabpanel">
@@ -137,6 +199,10 @@
         <div class="list" id="resourcesContainer">
           <div class="list-item"><div>Use this area to store links, templates, policies, contacts, and guidance.</div></div>
         </div>
+      </div>
+      <div class="card">
+        <div class="section-title">Counsellors</div>
+        <div class="list" id="counsellorsContainer"><div class="list-item"><div>Add a CSV at documents/counsellors.csv to populate.</div></div></div>
       </div>
     </section>
   </main>

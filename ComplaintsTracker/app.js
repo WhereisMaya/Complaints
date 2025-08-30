@@ -373,6 +373,9 @@
     }
   };
 
+  // UI state
+  let accSort = { key: 'subject', dir: 'asc' };
+
   // UI
   function setupTabs() {
     const buttons = qsa(".tab");
@@ -387,6 +390,7 @@
       if (tab === 'calendar') renderCalendar();
       if (tab === 'legal') renderLegalOverview();
       if (tab === 'accountability') renderAccountability();
+      if (tab === 'institutions') renderInstitutions();
       if (tab === 'all') renderComplaintsList();
       if (tab === 'dashboard') { computeMetrics(); renderSearch(); renderFilters(); }
       if (tab === 'details') renderDetailsPlaceholder();
@@ -406,15 +410,155 @@
       document.documentElement.dataset.theme = theme;
       localStorage.setItem(STORAGE_KEYS.theme, theme);
     });
+    // Redact toggle
+    const redactToggle = qs('#redactToggle');
+    const redactSaved = localStorage.getItem('complaintsTracker.redact') === '1';
+    if (redactToggle) {
+      redactToggle.checked = redactSaved;
+      redactToggle.addEventListener('change', () => {
+        localStorage.setItem('complaintsTracker.redact', redactToggle.checked ? '1' : '0');
+        renderAll();
+      });
+    }
+    // Customize button
+    const customizeBtn = qs('#customizeBtn');
+    if (customizeBtn) customizeBtn.addEventListener('click', openCustomizeModal);
+  }
+
+  function openCustomizeModal() {
+    const root = qs('#modalRoot'); if (!root) return;
+    const prefs = JSON.parse(localStorage.getItem('complaintsTracker.customTheme')||'{}');
+    const font = prefs.font || 'system-ui, -apple-system, Segoe UI, Roboto';
+    const text = prefs.text || '';
+    const bg = prefs.bg || '';
+    const accent = prefs.accent || '';
+    const fontSize = prefs.fontSize || 14;
+    const highContrast = !!prefs.highContrast;
+    const largeSpacing = !!prefs.largeSpacing;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="customModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">Custom Settings</div>
+            <button class="btn secondary" id="customClose">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="form">
+              <div class="form-row">
+                <label>Font Stack<input id="customFont" value="${font.replace(/\"/g,'&quot;')}" /></label>
+                <label>Text Color<input id="customText" type="color" value="${text||'#000000'}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Background Color<input id="customBg" type="color" value="${bg||'#ffffff'}" /></label>
+                <label>Accent Color<input id="customAccent" type="color" value="${accent||'#0a66d1'}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Font Size <input id="customFontSize" type="range" min="12" max="20" step="1" value="${fontSize}" /></label>
+                <label>Preset
+                  <select id="customPreset">
+                    <option value="">None</option>
+                    <option value="midnight">Midnight</option>
+                    <option value="ocean">Ocean</option>
+                    <option value="forest">Forest</option>
+                    <option value="highcontrast">High Contrast</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="chip"><input type="checkbox" id="customHC" ${highContrast?'checked':''}/> High Contrast</label>
+                <label class="chip"><input type="checkbox" id="customLS" ${largeSpacing?'checked':''}/> Larger Spacing</label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="customApply">Apply</button>
+            <button class="btn secondary" id="customReset">Reset</button>
+          </div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#customClose').addEventListener('click', close);
+    qs('#customModal').addEventListener('click', (e) => { if (e.target.id === 'customModal') close(); });
+    const presetSel = qs('#customPreset');
+    presetSel?.addEventListener('change', () => {
+      const v = presetSel.value;
+      const set = (id,val) => { const el=qs(id); if (el) el.value = val; };
+      if (v === 'midnight') { set('#customText','#e6e6e6'); set('#customBg','#0b0c10'); set('#customAccent','#3aa0ff'); }
+      if (v === 'ocean') { set('#customText','#0b2239'); set('#customBg','#e8f4ff'); set('#customAccent','#0a66d1'); }
+      if (v === 'forest') { set('#customText','#0f2e1d'); set('#customBg','#ecf8f1'); set('#customAccent','#0f8c55'); }
+      if (v === 'highcontrast') { set('#customText','#000000'); set('#customBg','#ffffff'); set('#customAccent','#000000'); const hc=qs('#customHC'); if (hc) hc.checked=true; }
+    });
+    qs('#customApply').addEventListener('click', () => {
+      const newPrefs = {
+        font: qs('#customFont').value||'',
+        text: qs('#customText').value||'',
+        bg: qs('#customBg').value||'',
+        accent: qs('#customAccent').value||'',
+        fontSize: parseInt(qs('#customFontSize').value||'14',10),
+        highContrast: !!qs('#customHC').checked,
+        largeSpacing: !!qs('#customLS').checked
+      };
+      localStorage.setItem('complaintsTracker.customTheme', JSON.stringify(newPrefs));
+      applyCustomTheme();
+      close();
+    });
+    qs('#customReset').addEventListener('click', () => {
+      localStorage.removeItem('complaintsTracker.customTheme');
+      applyCustomTheme();
+      close();
+    });
+  }
+
+  function applyCustomTheme() {
+    const prefs = JSON.parse(localStorage.getItem('complaintsTracker.customTheme')||'{}');
+    const root = document.documentElement;
+    if (prefs.text) root.style.setProperty('--text', prefs.text);
+    if (prefs.bg) root.style.setProperty('--bg', prefs.bg);
+    if (prefs.accent) root.style.setProperty('--accent', prefs.accent);
+    if (prefs.font) document.body.style.fontFamily = prefs.font;
+    if (prefs.fontSize) document.body.style.fontSize = prefs.fontSize + 'px';
+    if (prefs.highContrast) {
+      root.style.setProperty('--text', '#000');
+      root.style.setProperty('--bg', '#fff');
+      root.style.setProperty('--accent', '#000');
+      root.style.setProperty('--danger', '#000');
+      document.body.style.setProperty('filter','contrast(1.05)');
+    } else {
+      document.body.style.removeProperty('filter');
+    }
+    if (prefs.largeSpacing) {
+      document.body.style.lineHeight = '1.7';
+      document.body.style.letterSpacing = '0.2px';
+    } else {
+      document.body.style.removeProperty('line-height');
+      document.body.style.removeProperty('letter-spacing');
+    }
+    if (!prefs.text && !prefs.bg && !prefs.accent) {
+      // clear overrides
+      root.style.removeProperty('--text');
+      root.style.removeProperty('--bg');
+      root.style.removeProperty('--accent');
+      document.body.style.removeProperty('font-family');
+      document.body.style.removeProperty('font-size');
+    }
   }
 
   function renderFilters() {
     const instSel = qs("#filterInstitution");
     const statusSel = qs("#filterStatus");
+    const dateSel = qs('#filterDate');
+    const segSel = qs('#segmentSelect');
     const institutions = Array.from(new Set(Data.complaints.map(c => c.institution).filter(Boolean))).sort();
     const statuses = Array.from(new Set(Data.complaints.map(c => c.status).filter(Boolean))).sort();
     instSel.innerHTML = `<option value="">All Institutions</option>` + institutions.map(i => `<option>${i}</option>`).join("");
     statusSel.innerHTML = `<option value="">All Statuses</option>` + statuses.map(s => `<option>${s}</option>`).join("");
+    if (dateSel && !dateSel.value) {
+      dateSel.value = '';
+    }
+    if (segSel) {
+      const segments = JSON.parse(localStorage.getItem('complaintsTracker.segments')||'[]');
+      segSel.innerHTML = `<option value="">Segments</option>` + segments.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    }
   }
 
   function computeMetrics() {
@@ -424,6 +568,57 @@
     qs("#metricTotal").textContent = String(total);
     qs("#metricEscalated").textContent = String(escalated);
     qs("#metricUnresolved").textContent = String(unresolved);
+  }
+
+  function monthsBetween(d1Iso, d2Iso) {
+    if (!d1Iso || !d2Iso) return 0;
+    const d1 = new Date(d1Iso);
+    const d2 = new Date(d2Iso);
+    let months = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+    if (d2.getDate() < d1.getDate()) months -= 1;
+    return Math.max(0, months);
+  }
+
+  function computeWarnings() {
+    const container = qs('#warningsContainer');
+    const card = qs('#warningsCard');
+    if (!container || !card) return;
+    const items = [];
+    const todayIso = new Date().toISOString().slice(0,10);
+    for (const c of Data.complaints) {
+      const freq = (c.expectedResponseFrequency||'').toLowerCase();
+      const last = c.lastResponseDate || c.dateFiled; // fallback
+      if (freq) {
+        const daysOverdue = Math.floor((new Date(todayIso) - new Date(last)) / (1000*60*60*24));
+        const m = monthsBetween(last, todayIso);
+        const overdue = (freq === 'weekly' && daysOverdue >= 7) || (freq === 'monthly' && m >= 1) || (freq === 'quarterly' && m >= 3);
+        if (overdue) {
+          const label = freq === 'weekly' ? `${Math.floor(daysOverdue/7)} weeks overdue` : `${m} months overdue`;
+          items.push({ id: c.id, text: `❗️ ${label} – ${freq.charAt(0).toUpperCase()+freq.slice(1)} contact required.`, c });
+          c.breachFlag = true;
+        }
+      }
+      if (c.breachFlag && !items.find(it => it.id === c.id)) {
+        items.push({ id: c.id, text: `🚫 Agreement possibly violated – review terms.`, c });
+      }
+    }
+    if (!items.length) { card.style.display = 'none'; container.innerHTML = ''; return; }
+    card.style.display = '';
+    container.innerHTML = items.map(it => `
+      <div class="list-item warn">
+        <div>
+          <div><strong>${it.c.title}</strong></div>
+          <div class="list-meta">${it.text}</div>
+        </div>
+        <div><button class="btn secondary" data-id="${it.id}">Open</button></div>
+      </div>
+    `).join('');
+    container.onclick = (e) => {
+      const btn = e.target.closest('button[data-id]');
+      if (!btn) return;
+      const c = Data.getComplaint(btn.getAttribute('data-id'));
+      if (c) showComplaintDetails(c);
+    };
   }
 
   function renderComplaintsList(list) {
@@ -441,6 +636,7 @@
             ${(c.escalationPath||[]).map(e => `<span class="chip">${e}</span>`).join(" ")}
             ${c.isPasswordProtected ? '<span class="chip protected">Protected</span>' : ''}
             ${c.linkedSAR ? '<span class="chip">Linked SAR: ' + c.linkedSAR + '</span>' : ''}
+            ${renderStatusChip(c)}
           </div>
         </div>
         <div class="list-actions">
@@ -467,27 +663,64 @@
     const input = qs("#searchInput");
     const instSel = qs("#filterInstitution");
     const statusSel = qs("#filterStatus");
+    const dateSel = qs('#filterDate');
+    const segSel = qs('#segmentSelect');
     const results = qs("#searchResults");
     const apply = () => {
       const q = (input.value || "").toLowerCase();
       const inst = instSel.value;
       const stat = statusSel.value;
+      const date = dateSel && dateSel.value;
       const filtered = Data.complaints.filter(c => {
         const matchesQ = !q || JSON.stringify(c).toLowerCase().includes(q);
         const matchesI = !inst || c.institution === inst;
         const matchesS = !stat || c.status === stat;
-        return matchesQ && matchesI && matchesS;
+        const matchesD = !date || (c.dateFiled||'').slice(0,10) === date;
+        return matchesQ && matchesI && matchesS && matchesD;
       });
       results.innerHTML = "";
+      if (!Data.complaints.length) {
+        results.innerHTML = '<div class="card"><div class="section-title">How to Use</div><div>No cases yet. Click <strong>Add Complaint</strong> to start tracking your case.</div></div>';
+        return;
+      }
       filtered.forEach(c => {
         const div = document.createElement("div");
         div.className = "list-item";
-        div.innerHTML = `<div><strong>${c.title}</strong><div class="list-meta">${c.institution} • ${c.status}</div></div><div><button class="btn secondary" data-id="${c.id}">Open</button></div>`;
+        div.innerHTML = `<div><strong>${c.title}</strong><div class="list-meta">${c.institution} • ${c.status} • ${fmtDate(c.dateFiled)}</div></div><div>${renderStatusChip(c)} <button class="btn secondary" data-id="${c.id}">Open</button></div>`;
         results.appendChild(div);
       });
     };
-    [input, instSel, statusSel].forEach(el => el.addEventListener("input", apply));
-    qs("#clearFiltersBtn").addEventListener("click", () => { input.value = ""; instSel.value = ""; statusSel.value = ""; apply(); });
+    [input, instSel, statusSel, dateSel, segSel].filter(Boolean).forEach(el => el.addEventListener("input", apply));
+    if (segSel) segSel.addEventListener('change', () => {
+      const id = segSel.value; if (!id) return;
+      const segments = JSON.parse(localStorage.getItem('complaintsTracker.segments')||'[]');
+      const seg = segments.find(s => s.id === id); if (!seg) return;
+      input.value = seg.q || '';
+      instSel.value = seg.inst || '';
+      statusSel.value = seg.stat || '';
+      if (dateSel) dateSel.value = seg.date || '';
+      apply();
+    });
+    const saveBtn = qs('#segmentSaveBtn');
+    const delBtn = qs('#segmentDeleteBtn');
+    saveBtn?.addEventListener('click', () => {
+      const segments = JSON.parse(localStorage.getItem('complaintsTracker.segments')||'[]');
+      const name = prompt('Segment name:'); if (!name) return;
+      const id = 'seg_'+Math.random().toString(36).slice(2,7);
+      segments.push({ id, name, q: input.value||'', inst: instSel.value||'', stat: statusSel.value||'', date: dateSel?.value||'' });
+      localStorage.setItem('complaintsTracker.segments', JSON.stringify(segments));
+      renderFilters();
+      segSel.value = id; // select new
+    });
+    delBtn?.addEventListener('click', () => {
+      const id = segSel?.value; if (!id) return;
+      const segments = JSON.parse(localStorage.getItem('complaintsTracker.segments')||'[]');
+      const next = segments.filter(s => s.id !== id);
+      localStorage.setItem('complaintsTracker.segments', JSON.stringify(next));
+      renderFilters();
+      if (segSel) segSel.value = '';
+    });
+    qs("#clearFiltersBtn").addEventListener("click", () => { if (input) input.value = ""; if (instSel) instSel.value = ""; if (statusSel) statusSel.value = ""; if (dateSel) dateSel.value = ""; apply(); });
     apply();
     results.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-id]");
@@ -495,6 +728,52 @@
       const c = Data.getComplaint(btn.getAttribute("data-id"));
       if (c) showComplaintDetails(c);
     });
+  }
+
+  function renderStatusChip(complaint) {
+    const status = (complaint.status||'').toLowerCase();
+    if (/refus|refused|rejected|declined/.test(status)) return '<span class="chip status-refused">⛔ Refused</span>';
+    if (/resolved|closed/.test(status)) return '<span class="chip status-green">🟢 Resolved</span>';
+    if (/escalated|phso|appeal|iopc|chief|legal/.test(status)) return '<span class="chip status-amber">🟠 Escalated</span>';
+    return '<span class="chip status-red">🔴 Unresolved</span>';
+  }
+
+  function maskText(text) {
+    if (!text) return '';
+    // Basic PII redaction patterns (expandable): emails, phone numbers, badge/employee numbers like ABC1234 or #12345
+    const email = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig;
+    const phone = /\b(?:\+?\d[\d\s\-()]{7,}\d)\b/g;
+    const badge = /\b(?:badge|warrant|employee|staff)\s*#?\s*\d{3,}\b/ig;
+    const idlike = /\b[A-Z]{2,5}\d{3,6}\b/g; // simple token pattern
+    return String(text)
+      .replace(email, '[redacted-email]')
+      .replace(phone, '[redacted-phone]')
+      .replace(badge, '[redacted-id]')
+      .replace(idlike, '[redacted-id]');
+  }
+
+  function redactComplaintDeep(complaint) {
+    const redacted = JSON.parse(JSON.stringify(complaint));
+    const overrides = complaint.redactOverrides || {};
+    const redactFields = (obj, keys) => { keys.forEach(k => { if (obj[k]) obj[k] = maskText(obj[k]); }); };
+    const rootKeys = ['title','institution','contactPerson','complaintContent','institutionAddress','institutionEmail','status','passwordHint','agreedTerms'];
+    redactFields(redacted, rootKeys.filter(k => overrides[k] !== false));
+    (redacted.concerns||[]).forEach(c => {
+      const ck = c.id || '';
+      const cov = (overrides.concerns||{})[ck] || {};
+      redactFields(c, ['summary','details','decisionMaker','response'].filter(k => cov[k] !== false));
+      c.evidence = (c.evidence||[]).map(e => maskText(e));
+      c.notes = (c.notes||[]).map(n => ({ ...n, text: cov.notesText===false?n.text:maskText(n.text), urls: (n.urls||[]).map(u => cov.notesUrls===false?u:maskText(u)) }));
+      c.responses = (c.responses||[]).map(r => ({ ...r, decisionMaker: cov.responsesDecision===false?r.decisionMaker:maskText(r.decisionMaker), text: cov.responsesText===false?r.text:maskText(r.text), urls: (r.urls||[]).map(u => cov.responsesUrls===false?u:maskText(u)) }));
+      // attachments filtering by safety flag from overrides
+      if (Array.isArray(c.attachments)) {
+        c.attachments = c.attachments.filter(key => {
+          const ok = ((overrides.safeAttachments||[]).includes(key));
+          return ok; // only include marked safe in redacted view
+        });
+      }
+    });
+    return redacted;
   }
 
   function populateLinkedSarSelect() {
@@ -506,16 +785,256 @@
     const sel = qs('#institutionSelect');
     const addr = qs('#institutionAddress');
     const mail = qs('#institutionEmail');
-    const rows = await loadInstitutions();
+    const csvRows = await loadInstitutions();
+    const added = JSON.parse(localStorage.getItem('complaintsTracker.addedInstitutions')||'[]');
+    const rows = [...csvRows, ...added];
     const dl = qs('#institutionList');
     if (dl) dl.innerHTML = rows.map(r => `<option value="${r.name}" data-address="${r.address||''}" data-email="${r.email||''}"></option>`).join('');
     sel.addEventListener('input', () => {
       const val = sel.value;
       const match = rows.find(r => r.name === val);
-      if (match) { addr.value = match.address || ''; mail.value = match.email || ''; }
+      if (match) {
+        addr.value = match.address || '';
+        mail.value = match.email || '';
+        const contact = qs('#contactPerson');
+        if (contact && match.defaultContact) contact.value = match.defaultContact;
+        const freqSel = qs('select[name="expectedResponseFrequency"]');
+        if (freqSel && match.defaultExpectedResponseFrequency) freqSel.value = match.defaultExpectedResponseFrequency;
+      }
     });
     const addBtn = qs('#addInstitutionBtn');
     if (addBtn) addBtn.onclick = () => openAddInstitutionModal(sel);
+  }
+
+  function exportInstitutionsCsv(rows) {
+    const headers = ['name','address','email','cases'];
+    const csv = [headers.join(','), ...rows.map(r => {
+      const line = [r.name||'', r.address||'', r.email||'', String(r.caseCount||0)];
+      return line.map(s => /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s).join(',');
+    })].join('\n');
+    downloadBlob(csv, `institutions-${Date.now()}.csv`, 'text/csv');
+  }
+
+  async function renderInstitutions() {
+    const panel = qs('#panel-institutions');
+    if (!panel || !panel.classList.contains('active')) return;
+    const container = qs('#institutionsContainer');
+    const searchInput = qs('#instSearchInput');
+    const csvRows = await loadInstitutions();
+    const added = JSON.parse(localStorage.getItem('complaintsTracker.addedInstitutions')||'[]');
+    const merged = [...csvRows, ...added].reduce((acc, r) => {
+      const name = (r.name||'').trim(); if (!name) return acc;
+      if (!acc[name]) acc[name] = { name, address: r.address||'', email: r.email||'', caseCount: 0 };
+      return acc;
+    }, {});
+    // compute case counts
+    for (const c of Data.complaints) {
+      const key = (c.institution||'').trim(); if (!key) continue;
+      if (!merged[key]) merged[key] = { name: key, address: '', email: '', caseCount: 0 };
+      merged[key].caseCount += 1;
+    }
+    let rows = Object.values(merged).sort((a,b)=>a.name.localeCompare(b.name));
+    const apply = () => {
+      const q = (searchInput?.value||'').toLowerCase();
+      const view = rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+      container.innerHTML = `
+        <div class="card">
+          <table class="table">
+            <thead><tr><th>Name</th><th>Address</th><th>Email</th><th>Cases</th><th></th></tr></thead>
+            <tbody>
+              ${view.map(r => `
+                <tr>
+                  <td>${r.name}</td>
+                  <td>${r.address||''}</td>
+                  <td>${r.email||''}</td>
+                  <td>${r.caseCount||0}</td>
+                  <td>
+                    <button class="btn secondary" data-open="${r.name}">Open Cases</button>
+                    <button class="btn secondary" data-edit="${r.name}">Edit</button>
+                    <button class="btn secondary" data-del="${r.name}">Delete</button>
+                  </td>
+                </tr>
+              `).join('') || '<tr><td colspan="5">No institutions</td></tr>'}
+            </tbody>
+          </table>
+        </div>`;
+    };
+    if (searchInput) searchInput.oninput = apply;
+    apply();
+    qs('#instAddBtn')?.addEventListener('click', () => openInstitutionEditModal({ name: '', address: '', email: '', defaultContact: '', defaultExpectedResponseFrequency: '' }));
+    qs('#instExportBtn')?.addEventListener('click', () => exportInstitutionsCsv(rows));
+    qs('#instImportBtn')?.addEventListener('click', () => qs('#instImportInput')?.click());
+    qs('#instImportInput')?.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0]; if (!file) return;
+      try {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter(Boolean);
+        if (!lines.length) return;
+        const hasHeader = /name/i.test(lines[0]);
+        const body = hasHeader ? lines.slice(1) : lines;
+        const incoming = body.map(l => {
+          const parts = l.split(/,(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)/);
+          return { name: (parts[0]||'').replace(/^\"|\"$/g,''), address: (parts[1]||'').replace(/^\"|\"$/g,''), email: (parts[2]||'').replace(/^\"|\"$/g,'') };
+        }).filter(r => r.name);
+        const store = JSON.parse(localStorage.getItem('complaintsTracker.addedInstitutions')||'[]');
+        const byName = new Map(store.map(r => [r.name, r]));
+        for (const r of incoming) {
+          if (byName.has(r.name)) {
+            // merge non-empty fields without overwriting
+            const cur = byName.get(r.name);
+            byName.set(r.name, { ...cur, address: cur.address || r.address, email: cur.email || r.email });
+          } else {
+            byName.set(r.name, r);
+          }
+        }
+        localStorage.setItem('complaintsTracker.addedInstitutions', JSON.stringify(Array.from(byName.values())));
+        renderInstitutions();
+        alert('Institutions imported.');
+      } finally { e.target.value = ''; }
+    }, { once: true });
+    container.onclick = (e) => {
+      const open = e.target.closest('button[data-open]');
+      const edit = e.target.closest('button[data-edit]');
+      const del = e.target.closest('button[data-del]');
+      if (open) {
+        const name = open.getAttribute('data-open');
+        openInstitutionProfile(name);
+      }
+      if (edit) {
+        const name = edit.getAttribute('data-edit');
+        const rec = rows.find(r => r.name === name) || { name, address: '', email: '' };
+        openInstitutionEditModal(rec);
+      }
+      if (del) {
+        const name = del.getAttribute('data-del');
+        const conf = confirm(`Remove local override for ${name}? (Bundled CSV remains unchanged)`);
+        if (!conf) return;
+        const store = JSON.parse(localStorage.getItem('complaintsTracker.addedInstitutions')||'[]');
+        const next = store.filter(r => r.name !== name);
+        localStorage.setItem('complaintsTracker.addedInstitutions', JSON.stringify(next));
+        renderInstitutions();
+      }
+    };
+  }
+
+  function openInstitutionProfile(name) {
+    const root = qs('#modalRoot'); if (!root) return;
+    const store = JSON.parse(localStorage.getItem('complaintsTracker.addedInstitutions')||'[]');
+    const csvMatch = (function(){ return []; })();
+    const rec = store.find(r => r.name === name) || { name };
+    const cases = Data.complaints.filter(c => c.institution === name);
+    const urls = Array.isArray(rec.urls) ? rec.urls : [];
+    root.innerHTML = `
+      <div class="modal-backdrop" id="instProfileModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">${name}</div>
+            <button class="btn secondary" id="instProfileClose">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="stack">
+              <div class="list-item"><div><strong>Default Contact</strong></div><div>${rec.defaultContact||'—'}</div></div>
+              <div class="list-item"><div><strong>Default Frequency</strong></div><div>${rec.defaultExpectedResponseFrequency||'—'}</div></div>
+              <div class="list-item"><div><strong>Notes</strong></div><div>${rec.notes||''}</div></div>
+              <div class="list-item"><div><strong>Resources</strong></div><div>${urls.map(u => u.startsWith('http')?`<a href="${u}" target="_blank" rel="noopener">${u}</a>`:u).join(', ')||'—'}</div></div>
+              <div class="section-title">Cases (${cases.length})</div>
+              <div class="list">${cases.map(c => `<div class=\"list-item\"><div><strong>${c.title}</strong><div class=\"list-meta\">${c.status} • ${new Date(c.dateFiled).toLocaleDateString()}</div></div><div><button class=\"btn secondary\" data-open=\"${c.id}\">Open</button></div></div>`).join('')||'<div class=\"list-item\"><div>No cases</div></div>'}</div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="bulkChaseBtn">Send 30-day chaser to open cases</button>
+            <button class="btn secondary" id="editInstitutionBtn">Edit Institution</button>
+          </div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#instProfileClose').addEventListener('click', close);
+    qs('#editInstitutionBtn').addEventListener('click', () => { close(); openInstitutionEditModal(rec); });
+    qs('#bulkChaseBtn').addEventListener('click', () => {
+      const targets = cases.filter(c => !/(resolved|closed)/i.test(c.status||''));
+      if (!targets.length) { alert('No open cases to chase.'); return; }
+      const subject = encodeURIComponent('Request for update');
+      const body = encodeURIComponent('Dear Sir/Madam,\n\nPlease provide an update on the below cases within 14 days.\n\n' + targets.map(c => `- ${c.id}: ${c.title} (${new Date(c.dateFiled).toLocaleDateString()})`).join('\n') + '\n\nKind regards');
+      const mailto = `mailto:${(rec.email||'')}${'?subject='+subject+'&body='+body}`;
+      window.location.href = mailto;
+    });
+    qs('#instProfileModal').addEventListener('click', (e) => { if (e.target.id === 'instProfileModal') close(); });
+    const list = qs('#instProfileModal .list');
+    if (list) list.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-open]');
+      if (!btn) return;
+      const c = Data.getComplaint(btn.getAttribute('data-open'));
+      if (c) { close(); showComplaintDetails(c); }
+    });
+  }
+
+  function openInstitutionEditModal(record) {
+    const root = qs('#modalRoot'); if (!root) return;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="instEditModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">Edit Institution</div>
+            <button class="btn secondary" id="instEditClose">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="form">
+              <div class="form-row">
+                <label>Name<input id="editInstName" value="${(record.name||'').replace(/\"/g,'&quot;')}" /></label>
+                <label>Address<input id="editInstAddr" value="${(record.address||'').replace(/\"/g,'&quot;')}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Email<input id="editInstEmail" type="email" value="${(record.email||'').replace(/\"/g,'&quot;')}" /></label>
+                <label>Default Contact<input id="editInstContact" value="${(record.defaultContact||'').replace(/\"/g,'&quot;')}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Default Expected Response
+                  <select id="editInstFreq">
+                    <option value="">None</option>
+                    <option ${record.defaultExpectedResponseFrequency==='Weekly'?'selected':''}>Weekly</option>
+                    <option ${record.defaultExpectedResponseFrequency==='Monthly'?'selected':''}>Monthly</option>
+                    <option ${record.defaultExpectedResponseFrequency==='Quarterly'?'selected':''}>Quarterly</option>
+                  </select>
+                </label>
+                <label>Resource URLs (comma-separated)<input id="editInstUrls" value="${Array.isArray(record.urls)?record.urls.join(', '):''}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Notes<textarea id="editInstNotes" rows="3">${(record.notes||'')}</textarea></label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="instEditSave">Save</button>
+            <button class="btn secondary" id="instEditCancel">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#instEditClose').addEventListener('click', close);
+    qs('#instEditCancel').addEventListener('click', close);
+    qs('#instEditModal').addEventListener('click', (e) => { if (e.target.id === 'instEditModal') close(); });
+    qs('#instEditSave').addEventListener('click', () => {
+      const name = (qs('#editInstName').value||'').trim();
+      const address = (qs('#editInstAddr').value||'').trim();
+      const email = (qs('#editInstEmail').value||'').trim();
+      const defaultContact = (qs('#editInstContact').value||'').trim();
+      const defaultExpectedResponseFrequency = (qs('#editInstFreq').value||'').trim();
+      const urls = (qs('#editInstUrls').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+      const notes = (qs('#editInstNotes').value||'');
+      if (!name) { alert('Name required'); return; }
+      const store = JSON.parse(localStorage.getItem('complaintsTracker.addedInstitutions')||'[]');
+      // duplicate name check (allow if editing same name)
+      if (name !== record.name && store.some(r => r.name === name)) { alert('Institution with this name already exists.'); return; }
+      const idx = store.findIndex(r => r.name === record.name);
+      const updated = { name, address, email, defaultContact, defaultExpectedResponseFrequency, urls, notes };
+      if (idx >= 0) store[idx] = updated; else store.push(updated);
+      localStorage.setItem('complaintsTracker.addedInstitutions', JSON.stringify(store));
+      close(); renderInstitutions();
+    });
+  }
+
+  function openAddInstitutionModalInline() {
+    openInstitutionEditModal({ name: '', address: '', email: '', defaultContact: '', defaultExpectedResponseFrequency: '' });
   }
 
   function openAddInstitutionModal(selectEl) {
@@ -591,6 +1110,12 @@
         passwordHint: data.passwordHint || "",
         institutionAddress: data.institutionAddress || "",
         institutionEmail: data.institutionEmail || "",
+        eventDate: data.eventDate || "",
+        refusalDate: data.refusalDate || "",
+        expectedResponseFrequency: data.expectedResponseFrequency || "",
+        lastResponseDate: data.lastResponseDate || "",
+        agreedTerms: data.agreedTerms || "",
+        breachFlag: !!data.breachFlag,
         attachments: [],
         history: []
       };
@@ -663,18 +1188,36 @@
     const el = qs("#detailsContainer");
     const sarLabel = complaint.linkedSAR ? `Linked SAR: <a href="#" id="openLinkedSar">${complaint.linkedSAR}</a>` : "No linked SAR";
     const auditOk = await verifyHistoryChain(complaint);
+    const redactOn = localStorage.getItem('complaintsTracker.redact') === '1';
+    const viewComplaint = redactOn ? redactComplaintDeep(complaint) : complaint;
     el.innerHTML = `
       <div class="grid">
         <div class="card">
           <div class="section-title">Overview</div>
-          <div><strong>${complaint.title}</strong></div>
-          <div class="list-meta">${complaint.institution} • ${fmtDate(complaint.dateFiled)} • ${complaint.status}</div>
+          <div><strong>${viewComplaint.title}</strong></div>
+          <div class="list-meta">${viewComplaint.institution} • ${fmtDate(viewComplaint.dateFiled)} • ${viewComplaint.status} ${renderStatusChip(viewComplaint)}</div>
           <div class="list-meta">${sarLabel}</div>
-          <div style="margin-top:8px;">${complaint.complaintContent}</div>
-          ${complaint.isPasswordProtected ? `<div class="chip protected" style="margin-top:8px;">Password Protected${complaint.passwordHint?` — Hint: ${complaint.passwordHint}`:""}</div>` : ""}
+          ${(viewComplaint.eventDate||viewComplaint.refusalDate)?`<div class=\"list-meta\">Event: ${fmtDate(viewComplaint.eventDate)} ${viewComplaint.refusalDate?` • Refused: ${fmtDate(viewComplaint.refusalDate)}`:''} ${viewComplaint.eventDate?` • ${monthsSinceText(viewComplaint.eventDate)} since event`:''}</div>`:''}
+          ${(viewComplaint.expectedResponseFrequency||viewComplaint.lastResponseDate||viewComplaint.agreedTerms||viewComplaint.breachFlag) ? `
+            <div class="stack" style="margin-top:8px;">
+              ${viewComplaint.expectedResponseFrequency ? `<div class=\"chip\">Expected: ${viewComplaint.expectedResponseFrequency}</div>` : ''}
+              ${viewComplaint.lastResponseDate ? `<div class=\"chip\">Last Response: ${fmtDate(viewComplaint.lastResponseDate)}</div>` : ''}
+              ${viewComplaint.agreedTerms ? `<div class=\"chip\">Agreed Terms noted</div>` : ''}
+              ${viewComplaint.breachFlag ? `<div class=\"chip status-red\">Breach</div>` : ''}
+            </div>
+          `: ''}
+          <div style="margin-top:8px;">${viewComplaint.complaintContent}</div>
+          ${viewComplaint.isPasswordProtected ? `<div class="chip protected" style="margin-top:8px;">Password Protected${viewComplaint.passwordHint?` — Hint: ${viewComplaint.passwordHint}`:""}</div>` : ""}
           <div class="chip" style="margin-top:8px;">Audit Trail: ${auditOk ? "Valid" : "Invalid"}</div>
           <div class="form-actions" style="margin-top:10px;">
             ${complaint.isPasswordProtected ? `<button class="btn" id="unlockBtn">Unlock</button>` : ""}
+            <button class="btn secondary" id="genSummaryBtn">Generate Summary</button>
+            <button class="btn secondary" id="chaserBtn">Chaser</button>
+            <button class="btn secondary" id="closureBtn">Closure</button>
+            <button class="btn secondary" id="redactControlsBtn">Redaction Controls</button>
+            <button class="btn" id="shareRedactedBtn">Share Redacted</button>
+            <button class="btn secondary" id="shareFullBtn">Share Full</button>
+            <button class="btn secondary" id="shareConcernsBtn">Share Concerns</button>
             <button class="btn secondary" id="editBtn">Edit</button>
           </div>
           <div class="form-actions" style="margin-top:8px;">
@@ -685,7 +1228,7 @@
         <div class="card">
           <div class="section-title">Concerns</div>
           <div class="stack" id="concernsList">
-            ${(complaint.concerns||[]).map(cc => `
+            ${(viewComplaint.concerns||[]).map(cc => `
               <div class="list-item">
                 <div>
                   <div><strong>${cc.summary}</strong></div>
@@ -714,6 +1257,7 @@
                     <button class="btn secondary" data-action="delete" data-id="${cc.id}">Delete</button>
                     <button class="btn secondary" data-action="addnote" data-id="${cc.id}">Add Note</button>
                     <button class="btn secondary" data-action="addfiles" data-id="${cc.id}">Add Files</button>
+                    <button class="btn secondary" data-action="shareconcern" data-id="${cc.id}">Share Concern</button>
                   </div>
                 </div>
               </div>
@@ -790,6 +1334,20 @@
     });
 
     const unlockBtn = qs("#unlockBtn");
+    const genSummaryBtn = qs('#genSummaryBtn');
+    if (genSummaryBtn) genSummaryBtn.addEventListener('click', () => generateNegligenceSummary(complaint));
+    const chaserBtn = qs('#chaserBtn');
+    if (chaserBtn) chaserBtn.addEventListener('click', () => openChaserModal(complaint));
+    const closureBtn = qs('#closureBtn');
+    if (closureBtn) closureBtn.addEventListener('click', () => openClosureModal(complaint));
+    const redBtn = qs('#redactControlsBtn');
+    if (redBtn) redBtn.addEventListener('click', () => openRedactionControlsModal(complaint));
+    const shareRedBtn = qs('#shareRedactedBtn');
+    if (shareRedBtn) shareRedBtn.addEventListener('click', () => shareStandaloneComplaint(complaint, true));
+    const shareFullBtn = qs('#shareFullBtn');
+    if (shareFullBtn) shareFullBtn.addEventListener('click', () => shareStandaloneComplaint(complaint, false));
+    const shareConsBtn = qs('#shareConcernsBtn');
+    if (shareConsBtn) shareConsBtn.addEventListener('click', () => openShareConcernsModal(complaint));
     if (unlockBtn) unlockBtn.addEventListener("click", async () => {
       const pwd = prompt("Enter complaint password:") || "";
       try {
@@ -846,6 +1404,7 @@
         }, { once: true });
         finput.click();
       }
+      if (action === 'shareconcern') { openShareSingleConcernModal(complaint, cc); return; }
     });
 
     // Per-concern attachment downloads (delegated)
@@ -881,6 +1440,30 @@
         showComplaintDetails(complaint);
       }
     });
+  }
+
+  function generateNegligenceSummary(complaint) {
+    const today = new Date().toLocaleDateString();
+    const inst = complaint.institution || 'the responding institution';
+    const dept = complaint.contactPerson ? `${inst}, ${complaint.contactPerson}` : inst;
+    const freq = complaint.expectedResponseFrequency || 'regular updates';
+    const last = complaint.lastResponseDate ? new Date(complaint.lastResponseDate).toLocaleDateString() : 'N/A';
+    const agreed = complaint.agreedTerms || 'prior agreement to accept and process further complaints';
+    const lines = [];
+    lines.push(`As of ${today}, the responding institution (${dept}) has failed to meet its agreed duty of ${freq}. The last update was received on ${last}.`);
+    lines.push('');
+    lines.push(`Additionally, despite ${agreed}, this process has been obstructed without cause or explanation.`);
+    downloadBlob(lines.join('\n'), `${complaint.id}-summary.txt`, 'text/plain');
+  }
+
+  function monthsSinceText(iso) {
+    if (!iso) return '';
+    const now = new Date().toISOString().slice(0,10);
+    const d1 = new Date(iso), d2 = new Date(now);
+    let m = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+    if (d2.getDate() < d1.getDate()) m -= 1;
+    m = Math.max(0, m);
+    return `${m} month${m===1?'':'s'}`;
   }
 
   function showLinkedSar(sarId) {
@@ -1129,6 +1712,140 @@
       }
     });
     qs("#printPdfBtn").addEventListener("click", () => window.print());
+    const exportCsvBtn = qs('#exportCsvBtn');
+    if (exportCsvBtn) exportCsvBtn.addEventListener('click', () => exportComplaintsCsv(Data.complaints));
+    const exportListCsvBtn = qs('#exportListCsvBtn');
+    if (exportListCsvBtn) exportListCsvBtn.addEventListener('click', () => exportComplaintsCsv(Data.complaints));
+    const exportIcsBtn = qs('#exportIcsBtn');
+    if (exportIcsBtn) exportIcsBtn.addEventListener('click', () => exportCalendarIcs());
+    // Redacted exports
+    const expJson = qs('#exportJsonBtn');
+    expJson?.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const redact = confirm('Export REDACTED JSON? Click Cancel for normal.');
+      if (redact) {
+        const bundle = { complaints: Data.complaints.map(c => redactComplaintDeep(c)), exportedAt: new Date().toISOString(), redacted: true };
+        downloadBlob(JSON.stringify(bundle, null, 2), `complaints-export-redacted-${Date.now()}.json`);
+      } else {
+        const bundle = { complaints: Data.complaints, sars: Data.sars, phso: Data.phsoCases, legal: Data.legalCases, exportedAt: new Date().toISOString() };
+        downloadBlob(JSON.stringify(bundle, null, 2), `complaints-export-${Date.now()}.json`);
+      }
+    });
+  }
+
+  function exportCalendarIcs() {
+    const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//ComplaintsTracker//EN'];
+    const pushEvent = (summary, dateStr, uid) => {
+      if (!dateStr) return;
+      const dt = dateStr.replace(/-/g,'');
+      lines.push('BEGIN:VEVENT');
+      lines.push(`UID:${uid || Math.random().toString(36).slice(2)}@complaintstracker`);
+      lines.push(`DTSTART;VALUE=DATE:${dt}`);
+      lines.push(`SUMMARY:${summary}`);
+      lines.push('END:VEVENT');
+    };
+    for (const c of Data.complaints) {
+      const basis = c.refusalDate || c.eventDate || c.dateFiled;
+      if (basis) {
+        const d = new Date(basis);
+        const phso = new Date(d); phso.setFullYear(d.getFullYear()+1);
+        pushEvent(`PHSO deadline for ${c.id}: ${c.title}`, phso.toISOString().slice(0,10), `${c.id}-phso`);
+        if (c.eventDate) {
+          const ed = new Date(c.eventDate); const legal = new Date(ed); legal.setFullYear(ed.getFullYear()+3);
+          pushEvent(`Legal limitation for ${c.id}: ${c.title}`, legal.toISOString().slice(0,10), `${c.id}-legal`);
+        }
+      }
+      if (c.expectedResponseFrequency && (c.lastResponseDate || c.dateFiled)) {
+        const base = new Date(c.lastResponseDate || c.dateFiled);
+        const next = new Date(base);
+        if (c.expectedResponseFrequency === 'Weekly') next.setDate(base.getDate()+7);
+        if (c.expectedResponseFrequency === 'Monthly') next.setMonth(base.getMonth()+1);
+        if (c.expectedResponseFrequency === 'Quarterly') next.setMonth(base.getMonth()+3);
+        pushEvent(`Next expected update for ${c.id}: ${c.title}`, next.toISOString().slice(0,10), `${c.id}-next`);
+      }
+    }
+    lines.push('END:VCALENDAR');
+    downloadBlob(lines.join('\n'), `complaints-calendar-${Date.now()}.ics`, 'text/calendar');
+  }
+
+  function shareStandaloneComplaint(complaint, redacted) {
+    const data = redacted ? redactComplaintDeep(complaint) : complaint;
+    const doc = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Complaint ${data.id}${redacted?' (Redacted)':''}</title><style>body{font:14px system-ui;margin:16px} .card{border:1px solid #ccc;border-radius:8px;padding:12px;margin:8px 0} .list{display:grid;gap:8px} .list-item{border:1px solid #eee;border-radius:6px;padding:8px} .muted{color:#666}</style></head><body><h2>Complaint ${data.id}${redacted?' (Redacted)':''}</h2><div class="card"><div><strong>${data.title}</strong></div><div class="muted">${data.institution||''} • ${data.status||''} • ${data.dateFiled||''}</div><div style="margin-top:8px;">${data.complaintContent||''}</div></div><div class="card"><div><strong>Concerns</strong></div><div class="list">${(data.concerns||[]).map(c => `<div class=\"list-item\"><div><strong>${c.summary||''}</strong></div><div class=\"muted\">Decision: ${c.decisionMaker||'—'} • ${c.responseDate||''}</div><div>${c.details||''}</div></div>`).join('')||'<div class=\"list-item\">None</div>'}</div></div><div class="card"><div class="muted">Generated ${new Date().toLocaleString()}</div></div><script>/* offline */</script></body></html>`;
+    const blob = new Blob([doc], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }
+
+  function exportComplaintsCsv(list) {
+    const headers = ['ID','Title','Institution','Date Filed','Status'];
+    const rows = list.map(c => [c.id, c.title, c.institution||'', (c.dateFiled||'').slice(0,10), c.status||'']);
+    const csv = [headers.join(','), ...rows.map(r => r.map(v => {
+      const s = String(v||'');
+      return (/[",\n]/.test(s)) ? '"' + s.replace(/"/g,'""') + '"' : s;
+    }).join(','))].join('\n');
+    downloadBlob(csv, `complaints-${Date.now()}.csv`, 'text/csv');
+  }
+
+  function renderActionRequired() {
+    const card = qs('#actionRequiredCard');
+    const listEl = qs('#actionRequiredContainer');
+    if (!card || !listEl) return;
+    const items = [];
+    const today = new Date();
+    for (const c of Data.complaints) {
+      const basis = c.refusalDate || c.eventDate || c.dateFiled;
+      if (basis) {
+        const d = new Date(basis);
+        const phsoDeadline = new Date(d); phsoDeadline.setFullYear(d.getFullYear()+1);
+        if (today > phsoDeadline && !/(phso|ombudsman)/i.test(c.status||'')) {
+          items.push({ c, kind: 'PHSO', text: `PHSO deadline passed (${phsoDeadline.toLocaleDateString()}). Consider escalating.` });
+        }
+      }
+      if (c.eventDate) {
+        const d = new Date(c.eventDate);
+        const legalDeadline = new Date(d); legalDeadline.setFullYear(d.getFullYear()+3);
+        if (today > legalDeadline && !/(legal|claim|court|litig)/i.test(c.status||'')) {
+          items.push({ c, kind: 'LEGAL', text: `Legal limitation expired (${legalDeadline.toLocaleDateString()}). Seek advice.` });
+        }
+      }
+      const last = c.lastResponseDate || c.dateFiled;
+      if (last) {
+        const days = Math.floor((today - new Date(last)) / (1000*60*60*24));
+        if (days >= 30 && !/(responded|resolved|closed)/i.test(c.status||'')) {
+          items.push({ c, kind: 'STALE', text: `${days} days since last response. Send chaser.` });
+        }
+      }
+    }
+    if (!items.length) { card.style.display = 'none'; listEl.innerHTML = ''; return; }
+    card.style.display = '';
+    listEl.innerHTML = items.map(it => `
+      <div class="list-item action">
+        <div>
+          <div><strong>${it.c.title}</strong></div>
+          <div class="list-meta">${it.text}</div>
+        </div>
+        <div class="form-actions">
+          <button class="btn secondary" data-open="${it.c.id}">Open</button>
+          <button class="btn" data-phso="${it.c.id}">Send to PHSO</button>
+          <button class="btn secondary" data-acc="${it.c.id}">Accountability</button>
+          <button class="btn secondary" data-chaser="${it.c.id}">Chaser</button>
+        </div>
+      </div>
+    `).join('');
+    listEl.onclick = (e) => {
+      const open = e.target.closest('button[data-open]');
+      const phso = e.target.closest('button[data-phso]');
+      const acc = e.target.closest('button[data-acc]');
+      const ch = e.target.closest('button[data-chaser]');
+      if (open) { const c = Data.getComplaint(open.getAttribute('data-open')); if (c) showComplaintDetails(c); }
+      if (phso) { const c = Data.getComplaint(phso.getAttribute('data-phso')); if (c) { c.status = 'Escalated to PHSO'; appendHistory(c,'Escalated via Action Required'); Data.upsertComplaint(c); autoCreatePhsoCase(c).then(()=>showPhsoTab(c.id)); } }
+      if (acc) { const c = Data.getComplaint(acc.getAttribute('data-acc')); if (c) {
+        const subject = c.contactPerson || c.institution || 'Unnamed Subject';
+        const entry = { id: `subj_${Math.random().toString(36).slice(2,7)}`, subject, role: 'Contact/Institution', organisation: c.institution||'', status: 'Open', allegations: '', harm: [], evidence: [], dates: [c.dateFiled].filter(Boolean), linkedComplaints: [c.id] };
+        Data.accountability.push(entry); Data.save(); alert('Sent to Accountability.'); qsa('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === 'accountability')); qsa('.panel').forEach(p => p.classList.remove('active')); qs('#panel-accountability').classList.add('active'); renderAccountability();
+      } }
+      if (ch) { const c = Data.getComplaint(ch.getAttribute('data-chaser')); if (c) openChaserModal(c); }
+    };
   }
 
   function renderAll() {
@@ -1143,6 +1860,8 @@
     renderCalendar();
     renderDetailsPlaceholder();
     renderResources();
+    computeWarnings();
+    renderActionRequired?.();
   }
 
   function renderLegalOverview() {
@@ -1263,18 +1982,45 @@
     if (!panel || !panel.classList.contains('active')) return;
     const container = qs('#accountabilityContainer');
     const list = Data.accountability || [];
-    const rows = list.map(s => `
-      <div class="list-item">
-        <div>
-          <div><strong>${s.subject}</strong> — ${s.role||''} @ ${s.organisation||''}</div>
-          <div class="list-meta">Status: ${s.status||'Open'} • Harm: ${(s.harm||[]).join(', ')}</div>
-        </div>
-        <div class="list-actions">
-          <button class="btn secondary" data-action="open" data-id="${s.id}">Open</button>
-        </div>
-      </div>
-    `).join('') || '<div class="list-item"><div>No accountability subjects</div></div>';
+    const searchInput = qs('#accSearchInput');
+    const filterList = () => {
+      const q = (searchInput?.value||'').toLowerCase();
+      return list.filter(s => !q || JSON.stringify(s).toLowerCase().includes(q));
+    };
+    const sorted = (function(){
+      const arr = filterList().slice();
+      const key = accSort.key; const dir = accSort.dir === 'asc' ? 1 : -1;
+      arr.sort((a,b) => String(a[key]||'').localeCompare(String(b[key]||'')) * dir);
+      return arr;
+    })();
+    const rows = (sorted).map(s => `
+      <tr>
+        <td>${s.subject}</td>
+        <td>${s.organisation||''}</td>
+        <td>${s.role||''}</td>
+        <td>${(s.chargeType||'').toString()}</td>
+        <td>${(s.linkedComplaints||[]).join(', ')||'—'}</td>
+        <td>${s.status||'Open'}</td>
+        <td><button class="btn secondary" data-action="open" data-id="${s.id}">Open</button></td>
+      </tr>
+    `).join('');
     container.innerHTML = `
+      <div class="card">
+        <table class="table">
+          <thead>
+            <tr>
+              <th data-sort="subject">Person/Subject</th>
+              <th data-sort="organisation">Institution</th>
+              <th data-sort="role">Role</th>
+              <th data-sort="chargeType">Charge</th>
+              <th>Linked</th>
+              <th data-sort="status">Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="7">No accountability subjects</td></tr>'}</tbody>
+        </table>
+      </div>
       <div class="list-header">
         <div>Subjects</div>
         <div class="list-actions">
@@ -1282,8 +2028,19 @@
           <button class="btn secondary" id="accExportBtn">Master Report Export</button>
         </div>
       </div>
-      <div class="list">${rows}</div>
     `;
+    if (searchInput) { searchInput.oninput = () => renderAccountability(); }
+    qs('#accClearBtn')?.addEventListener('click', () => { if (searchInput) searchInput.value = ''; renderAccountability(); });
+    const thead = container.querySelector('thead');
+    if (thead) {
+      thead.onclick = (e) => {
+        const th = e.target.closest('th[data-sort]');
+        if (!th) return;
+        const key = th.getAttribute('data-sort');
+        if (accSort.key === key) accSort.dir = accSort.dir === 'asc' ? 'desc' : 'asc'; else { accSort.key = key; accSort.dir = 'asc'; }
+        renderAccountability();
+      };
+    }
     container.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-action]');
       if (!btn) return;
@@ -1521,6 +2278,226 @@
     } catch (e) {
       container.innerHTML = '<div class="list-item"><div>resource.txt not found. Add one under documents/ to populate this section.</div></div>';
     }
+    // Counsellors CSV (optional)
+    const counsellorsEl = qs('#counsellorsContainer');
+    if (counsellorsEl) {
+      try {
+        const r = await fetch('documents/counsellors.csv', { cache: 'no-store' });
+        if (!r.ok) throw new Error('no csv');
+        const text = await r.text();
+        const lines = text.split(/\r?\n/).filter(Boolean);
+        if (lines.length && /,/.test(lines[0])) lines.shift();
+        const rows = lines.map(l => l.split(/,(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)/));
+        counsellorsEl.innerHTML = rows.slice(0,20).map(cols => `<div class=\"list-item\"><div>${(cols[0]||'Counsellor')}</div><div class=\"list-meta\">${(cols[1]||'')}</div></div>`).join('') || '<div class=\"list-item\"><div>No counsellors listed</div></div>';
+      } catch {
+        counsellorsEl.innerHTML = '<div class=\"list-item\"><div>Add a CSV at documents/counsellors.csv to populate.</div></div>';
+      }
+    }
+  }
+
+  function openClosureModal(complaint) {
+    const root = qs('#modalRoot'); if (!root) return;
+    const event = complaint.eventDate ? new Date(complaint.eventDate) : null;
+    const refusal = complaint.refusalDate ? new Date(complaint.refusalDate) : null;
+    const base = refusal || event || (complaint.dateFiled ? new Date(complaint.dateFiled) : null);
+    const phsoDeadline = base ? new Date(base.getFullYear()+1, base.getMonth(), base.getDate()) : null;
+    const legalDeadline = event ? new Date(event.getFullYear()+3, event.getMonth(), event.getDate()) : null;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="closureModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">Closure & Next Steps</div>
+            <button class="btn secondary" id="closureClose">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="stack">
+              <div class="list-item"><div><strong>Deadlines</strong></div><div class="list-meta">PHSO: ${phsoDeadline?phsoDeadline.toLocaleDateString():'N/A'} • Legal: ${legalDeadline?legalDeadline.toLocaleDateString():'N/A'}</div></div>
+              <div class="list-item"><div><strong>Checklist</strong></div><div class="list-meta">Tick each as you proceed.</div></div>
+              <div class="stack" id="closureChecklist">
+                <label class="list-item"><div><input type="checkbox" data-step="chaser" /> Sent 14/30-day chaser</div></label>
+                <label class="list-item"><div><input type="checkbox" data-step="phso" /> Prepared PHSO submission</div></label>
+                <label class="list-item"><div><input type="checkbox" data-step="legal" /> Sought legal advice</div></label>
+                <label class="list-item"><div><input type="checkbox" data-step="accountability" /> Logged individuals in Accountability</div></label>
+              </div>
+              <div class="list-item"><div><strong>Support</strong></div><div><a href="#" id="openResources">Open Resources</a></div></div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="closurePhso">Send to PHSO</button>
+            <button class="btn secondary" id="closureAcc">Send to Accountability</button>
+          </div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#closureClose').addEventListener('click', close);
+    qs('#closureModal').addEventListener('click', (e) => { if (e.target.id === 'closureModal') close(); });
+    qs('#openResources').addEventListener('click', (e) => { e.preventDefault(); qsa('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === 'resources')); qsa('.panel').forEach(p => p.classList.remove('active')); qs('#panel-resources').classList.add('active'); renderResources(); close(); });
+    qs('#closurePhso').addEventListener('click', async () => { complaint.status = 'Escalated to PHSO'; await appendHistory(complaint,'Escalated via Closure'); Data.upsertComplaint(complaint); await autoCreatePhsoCase(complaint); showPhsoTab(complaint.id); close(); });
+    qs('#closureAcc').addEventListener('click', () => { const subject = complaint.contactPerson || complaint.institution || 'Unnamed Subject'; const entry = { id: `subj_${Math.random().toString(36).slice(2,7)}`, subject, role: 'Contact/Institution', organisation: complaint.institution||'', status: 'Open', allegations: '', harm: [], evidence: [], dates: [complaint.dateFiled].filter(Boolean), linkedComplaints: [complaint.id] }; Data.accountability.push(entry); Data.save(); qsa('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === 'accountability')); qsa('.panel').forEach(p => p.classList.remove('active')); qs('#panel-accountability').classList.add('active'); renderAccountability(); close(); });
+  }
+
+  function openChaserModal(complaint) {
+    const root = qs('#modalRoot'); if (!root) return;
+    const to = (complaint.institutionEmail||'');
+    const subjectDefault = `Request for update: ${complaint.id}`;
+    const bodyDefault = `Dear ${complaint.contactPerson||'Sir/Madam'},\n\nPlease provide an update on complaint ${complaint.id} (${complaint.title}) filed on ${fmtDate(complaint.dateFiled)} within 14 days.\n\nKind regards`;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="chaserModal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="section-title">Send Chaser</div>
+            <button class="btn secondary" id="chaserClose">Close</button>
+          </div>
+          <div class="modal-body">
+            <div class="form">
+              <div class="form-row">
+                <label>To<input id="chaserTo" value="${to.replace(/\"/g,'&quot;')}" /></label>
+                <label>Subject<input id="chaserSubject" value="${subjectDefault.replace(/\"/g,'&quot;')}" /></label>
+              </div>
+              <div class="form-row">
+                <label>Body<textarea id="chaserBody" rows="6">${bodyDefault}</textarea></label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="chaserMailto">Open Email</button>
+            <button class="btn secondary" id="chaserCopy">Copy to Clipboard</button>
+          </div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#chaserClose').addEventListener('click', close);
+    qs('#chaserModal').addEventListener('click', (e) => { if (e.target.id === 'chaserModal') close(); });
+    qs('#chaserMailto').addEventListener('click', () => {
+      const toVal = (qs('#chaserTo').value||'');
+      const sub = encodeURIComponent(qs('#chaserSubject').value||'');
+      const body = encodeURIComponent(qs('#chaserBody').value||'');
+      window.location.href = `mailto:${toVal}?subject=${sub}&body=${body}`;
+    });
+    qs('#chaserCopy').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(qs('#chaserBody').value||''); alert('Copied'); } catch { alert('Copy failed'); }
+    });
+  }
+
+  function openRedactionControlsModal(complaint) {
+    const root = qs('#modalRoot'); if (!root) return;
+    const ov = complaint.redactOverrides || {};
+    const safe = new Set(ov.safeAttachments||[]);
+    root.innerHTML = `
+      <div class="modal-backdrop" id="redactModal">
+        <div class="modal">
+          <div class="modal-header"><div class="section-title">Redaction Controls</div><button class="btn secondary" id="redactClose">Close</button></div>
+          <div class="modal-body">
+            <div class="form">
+              <div class="form-row">
+                <label class="chip"><input type="checkbox" id="ovTitle" ${ov.title===false?'':'checked'} /> Title</label>
+                <label class="chip"><input type="checkbox" id="ovContent" ${ov.complaintContent===false?'':'checked'} /> Content</label>
+                <label class="chip"><input type="checkbox" id="ovInstEmail" ${ov.institutionEmail===false?'':'checked'} /> Institution Email</label>
+              </div>
+              <div class="section-title">Attachments Safety (include only checked in redacted)</div>
+              <div class="stack" id="ovFiles">${(complaint.concerns||[]).flatMap(c => (c.attachments||[])).map(key => `<label class=\"list-item\"><div><input type=\"checkbox\" data-key=\"${key}\" ${safe.has(key)?'checked':''}/> ${key}</div></label>`).join('') || '<div class="list-item"><div>No attachments</div></div>'}</div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="redactSave">Save Overrides</button>
+          </div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#redactClose').addEventListener('click', close);
+    qs('#redactModal').addEventListener('click', (e) => { if (e.target.id === 'redactModal') close(); });
+    qs('#redactSave').addEventListener('click', () => {
+      const next = complaint.redactOverrides || {};
+      next.title = qs('#ovTitle').checked ? true : false;
+      next.complaintContent = qs('#ovContent').checked ? true : false;
+      next.institutionEmail = qs('#ovInstEmail').checked ? true : false;
+      const keys = Array.from(document.querySelectorAll('#ovFiles input[type="checkbox"][data-key]')).filter(el => el.checked).map(el => el.getAttribute('data-key'));
+      next.safeAttachments = keys;
+      complaint.redactOverrides = next;
+      Data.upsertComplaint(complaint);
+      close();
+    });
+  }
+
+  function openShareConcernsModal(complaint) {
+    const root = qs('#modalRoot'); if (!root) return;
+    const targets = (complaint.concerns||[]);
+    root.innerHTML = `
+      <div class="modal-backdrop" id="shareConsModal">
+        <div class="modal">
+          <div class="modal-header"><div class="section-title">Share Concerns</div><button class="btn secondary" id="shareConsClose">Close</button></div>
+          <div class="modal-body">
+            <div class="form">
+              <div class="form-row"><label>Recipients<select id="regRecipient"><option value="psa">PSA Concerns</option><option value="cqc">CQC Concerns</option><option value="custom">Custom</option></select></label><label>Email<input id="regEmail" placeholder="concerns@example.org" /></label></div>
+              <div class="form-row"><label>Summary<textarea id="consSummary" rows="3" placeholder="Short summary of concerns being shared"></textarea></label></div>
+              <div class="section-title">Select Concerns</div>
+              <div class="stack" id="consList">${targets.map(c => `<label class=\"list-item\"><div><input type=\"checkbox\" data-id=\"${c.id}\"/> ${c.summary}</div></label>`).join('') || '<div class="list-item"><div>No concerns</div></div>'}</div>
+            </div>
+          </div>
+          <div class="modal-footer form-actions">
+            <button class="btn" id="consMail">Open Email</button>
+            <button class="btn secondary" id="consCopy">Copy Summary</button>
+          </div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#shareConsClose').addEventListener('click', close);
+    qs('#shareConsModal').addEventListener('click', (e) => { if (e.target.id === 'shareConsModal') close(); });
+    const recSel = qs('#regRecipient');
+    const emailInput = qs('#regEmail');
+    const setEmail = () => {
+      const v = recSel.value;
+      if (v==='psa') emailInput.value = 'concerns@professionalstandards.org.uk';
+      if (v==='cqc') emailInput.value = 'enquiries@cqc.org.uk';
+      if (v==='custom') emailInput.value = '';
+    };
+    recSel.addEventListener('change', setEmail); setEmail();
+    const buildText = () => {
+      const ids = Array.from(document.querySelectorAll('#consList input[type="checkbox"][data-id]')).filter(el => el.checked).map(el => el.getAttribute('data-id'));
+      const chosen = (complaint.concerns||[]).filter(c => ids.includes(c.id));
+      const lines = [];
+      lines.push(`Summary: ${(qs('#consSummary').value||'').trim()}`);
+      lines.push(`Complaint: ${complaint.id} — ${complaint.title}`);
+      lines.push('Concerns:');
+      chosen.forEach(c => { lines.push(`- ${c.summary}`); if (c.details) lines.push(`  ${c.details}`); });
+      const responses = chosen.flatMap(c => c.responses||[]);
+      if (responses.length) { lines.push('Responses:'); responses.forEach(r => lines.push(`- ${r.date||''} ${r.decisionMaker||''}: ${r.text||''}`)); }
+      return lines.join('\n');
+    };
+    qs('#consMail').addEventListener('click', () => {
+      const to = (qs('#regEmail').value||'');
+      const subject = encodeURIComponent(`Concerns regarding ${complaint.id}`);
+      const body = encodeURIComponent(buildText());
+      window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+    });
+    qs('#consCopy').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(buildText()); alert('Copied'); } catch { alert('Copy failed'); }
+    });
+  }
+
+  function openShareSingleConcernModal(complaint, concern) {
+    const root = qs('#modalRoot'); if (!root) return;
+    const text = `Complaint ${complaint.id}: ${complaint.title}\nConcern: ${concern.summary}\n${concern.details||''}`;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="shareOneModal">
+        <div class="modal">
+          <div class="modal-header"><div class="section-title">Share Concern</div><button class="btn secondary" id="shareOneClose">Close</button></div>
+          <div class="modal-body"><div class="form"><div class="form-row"><label>Recipient Email<input id="oneEmail" placeholder="concerns@example.org" /></label></div><div class="form-row"><label>Summary<textarea id="oneSummary" rows="3">${text}</textarea></label></div></div></div>
+          <div class="modal-footer form-actions"><button class="btn" id="oneMail">Open Email</button><button class="btn secondary" id="oneCopy">Copy</button></div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#shareOneClose').addEventListener('click', close);
+    qs('#shareOneModal').addEventListener('click', (e) => { if (e.target.id === 'shareOneModal') close(); });
+    qs('#oneMail').addEventListener('click', () => {
+      const to = qs('#oneEmail').value||'';
+      const subject = encodeURIComponent(`Concern regarding ${complaint.id}`);
+      const body = encodeURIComponent(qs('#oneSummary').value||'');
+      window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+    });
+    qs('#oneCopy').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(qs('#oneSummary').value||''); alert('Copied'); } catch { alert('Copy failed'); }
+    });
   }
 
   // Inject demo-only items when logged out (not saved back to disk). Hidden after login.
@@ -1532,6 +2509,17 @@
           { id: 'subj_demo1', subject: 'Sarah Matthews', role: 'Director', organisation: 'PSA', status: 'Open', allegations: 'Systemic denial of care; failure to act', harm: ['denial of care'], evidence: ['https://example.org/evidence-1'], dates: ['2025-07-02'], linkedComplaints: ['cmp_001'] },
           { id: 'subj_demo2', subject: 'Paul Philip', role: 'Chief Executive', organisation: 'GMC', status: 'Open', allegations: 'Negligence in oversight duties', harm: ['outing','harassment'], evidence: [], dates: [], linkedComplaints: ['cmp_001'] }
         ];
+      }
+      // Demo complaints (only if none loaded yet)
+      if (!Array.isArray(Data.complaints) || !Data.complaints.length) {
+        Data.complaints = [
+          { id: 'cmp_001', title: 'Failure to respond to SAR', dateFiled: '2025-05-01', institution: 'Devon & Cornwall Police', contactPerson: 'PSD', complaintContent: 'No response received to SAR within statutory time.', linkedSAR: 'sar_001', concerns: [{ id:'conc_001', summary:'No monthly update', details:'Breach of agreed monthly contact', decisionMaker:'PSD', responseDate:'', evidence:['https://example.org/ref-1'], response:'', notes:[], attachments:[], responses:[] }], status: 'Filed', escalationPath: ['Filed'], isPasswordProtected: false, passwordHint:'', institutionAddress:'', institutionEmail:'', expectedResponseFrequency:'Monthly', lastResponseDate:'', agreedTerms:'Monthly update required', breachFlag:false, attachments:[], history: [] },
+          { id: 'cmp_002', title: 'Complaint obstruction', dateFiled: '2025-06-10', institution: 'GMC', contactPerson: '', complaintContent: 'Refused to accept further complaints.', linkedSAR: '', concerns: [], status: 'Refused', escalationPath: ['Filed','Refused'], isPasswordProtected: false, passwordHint:'', institutionAddress:'', institutionEmail:'', expectedResponseFrequency:'', lastResponseDate:'', agreedTerms:'Agreed to accept further complaints', breachFlag:true, attachments:[], history: [] }
+        ];
+      }
+      // Demo SARs
+      if (!Array.isArray(Data.sars) || !Data.sars.length) {
+        Data.sars = [{ id:'sar_001', title:'Subject Access Request', institution:'Devon & Cornwall Police', dateFiled:'2025-04-15', status:'Pending', summary:'SAR submitted, awaiting response.' }];
       }
       // Render without persisting session-bound demo to localStorage (leave Data.save untouched here)
       renderAccountability();
@@ -1732,6 +2720,7 @@
     setupTabs();
     setupThemeToggle();
     await Data.init();
+    applyCustomTheme();
     // After data init, auto-create PHSO cases for complaints whose status includes 'PHSO'
     try {
       for (const c of Data.complaints) {
