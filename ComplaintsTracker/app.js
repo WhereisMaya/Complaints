@@ -464,6 +464,10 @@
                 <label>Accent Color<input id="customAccent" type="color" value="${accent||'#0a66d1'}" /></label>
               </div>
               <div class="form-row">
+                <label>Dark Theme Background<input id="customDarkBg" type="color" value="${(prefs.darkBg||'')||'#0b0c10'}" /></label>
+                <label>Light Theme Background<input id="customLightBg" type="color" value="${(prefs.lightBg||'')||'#eef1f5'}" /></label>
+              </div>
+              <div class="form-row">
                 <label>Font Size <input id="customFontSize" type="range" min="12" max="20" step="1" value="${fontSize}" /></label>
                 <label>Preset
                   <select id="customPreset">
@@ -505,6 +509,8 @@
         text: qs('#customText').value||'',
         bg: qs('#customBg').value||'',
         accent: qs('#customAccent').value||'',
+        darkBg: qs('#customDarkBg').value||'',
+        lightBg: qs('#customLightBg').value||'',
         fontSize: parseInt(qs('#customFontSize').value||'14',10),
         highContrast: !!qs('#customHC').checked,
         largeSpacing: !!qs('#customLS').checked
@@ -525,6 +531,8 @@
     const root = document.documentElement;
     if (prefs.text) root.style.setProperty('--text', prefs.text);
     if (prefs.bg) root.style.setProperty('--bg', prefs.bg);
+    if (prefs.darkBg && document.documentElement.dataset.theme === 'dark') root.style.setProperty('--bg', prefs.darkBg);
+    if (prefs.lightBg && document.documentElement.dataset.theme === 'light') root.style.setProperty('--bg', prefs.lightBg);
     if (prefs.accent) root.style.setProperty('--accent', prefs.accent);
     if (prefs.font) document.body.style.fontFamily = prefs.font;
     if (prefs.fontSize) document.body.style.fontSize = prefs.fontSize + 'px';
@@ -1510,14 +1518,28 @@
     const panel = qs("#panel-linked-sar");
     panel.classList.add("active");
     if (!sar) { panel.innerHTML = `<div class="card">No SAR found: ${sarId}</div>`; return; }
+    const due = sar.dateFiled ? new Date(new Date(sar.dateFiled).getTime() + 28*24*60*60*1000) : null;
+    const overdue = due && new Date() > due;
     panel.innerHTML = `
       <div class="card">
         <div class="section-title">Linked SAR</div>
         <div><strong>${sar.title}</strong></div>
-        <div class="list-meta">${sar.institution} • ${fmtDate(sar.dateFiled)} • ${sar.status}</div>
+        <div class="list-meta">${sar.institution} • Filed: ${fmtDate(sar.dateFiled)} • Status: ${sar.status||''}</div>
+        <div class="list-meta">Due: ${due?due.toLocaleDateString():'N/A'} ${overdue?'<span class="chip status-red">Overdue</span>':''}</div>
         <div style="margin-top:8px;">${sar.summary || ""}</div>
+        <div class="form-actions" style="margin-top:10px;">
+          <button class="btn" id="icoEscBtn">Escalate to ICO</button>
+          <button class="btn secondary" id="sarDoneBtn">Mark Completed</button>
+          <button class="btn secondary" id="sarMissedBtn">Log Missed Response</button>
+          <button class="btn secondary" id="sarSetIcoRefBtn">Set ICO Ref</button>
+        </div>
+        <div class="list-meta">ICO Ref: <span id="icoRefSpan">${sar.icoRef||'—'}</span></div>
       </div>
     `;
+    qs('#icoEscBtn').addEventListener('click', () => openIcoTemplateModal(sar));
+    qs('#sarDoneBtn').addEventListener('click', () => { sar.status='Completed'; Data.save(); showLinkedSar(sarId); });
+    qs('#sarMissedBtn').addEventListener('click', () => { sar.logs = sar.logs||[]; sar.logs.push({ date: new Date().toISOString().slice(0,10), event: 'Missed response logged' }); sar.status = sar.status||'Pending'; Data.save(); showLinkedSar(sarId); });
+    qs('#sarSetIcoRefBtn').addEventListener('click', () => { const ref = prompt('ICO Reference: ', sar.icoRef||'')||''; sar.icoRef = ref; Data.save(); showLinkedSar(sarId); });
   }
 
   function showPhsoTab(complaintId) {
@@ -1833,6 +1855,24 @@
     qs('#escTplModal').addEventListener('click', (e) => { if (e.target.id === 'escTplModal') close(); });
     qs('#escMail').addEventListener('click', () => { const to=qs('#escTo').value||''; const sub=encodeURIComponent(qs('#escSub').value||''); const b=encodeURIComponent(qs('#escBody').value||''); window.location.href=`mailto:${to}?subject=${sub}&body=${b}`; });
     qs('#escCopy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(qs('#escBody').value||''); alert('Copied'); } catch { alert('Copy failed'); } });
+  }
+
+  function openIcoTemplateModal(sar) {
+    const root = qs('#modalRoot'); if (!root) return;
+    const body = `Dear ICO,\n\nI wish to raise a complaint regarding a SAR submitted to ${sar.institution} on ${fmtDate(sar.dateFiled)}. The organisation has failed to respond within 28 days.\n\nDetails:\n- SAR ID: ${sar.id}\n- Title: ${sar.title}\n- Summary: ${sar.summary||''}\n\nPlease advise the next steps.\n\nKind regards`;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="icoTplModal">
+        <div class="modal">
+          <div class="modal-header"><div class="section-title">ICO Escalation Template</div><button class="btn secondary" id="icoTplClose">Close</button></div>
+          <div class="modal-body"><div class="form"><div class="form-row"><label>To<input id="icoTo" value="casework@ico.org.uk" /></label><label>Subject<input id="icoSub" value="SAR delay complaint" /></label></div><div class="form-row"><label>Body<textarea id="icoBody" rows="8">${body}</textarea></label></div></div></div>
+          <div class="modal-footer form-actions"><button class="btn" id="icoMail">Open Email</button><button class="btn secondary" id="icoCopy">Copy</button></div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#icoTplClose').addEventListener('click', close);
+    qs('#icoTplModal').addEventListener('click', (e) => { if (e.target.id === 'icoTplModal') close(); });
+    qs('#icoMail').addEventListener('click', () => { const to=qs('#icoTo').value||''; const sub=encodeURIComponent(qs('#icoSub').value||''); const b=encodeURIComponent(qs('#icoBody').value||''); window.location.href=`mailto:${to}?subject=${sub}&body=${b}`; });
+    qs('#icoCopy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(qs('#icoBody').value||''); alert('Copied'); } catch { alert('Copy failed'); } });
   }
 
   function exportComplaintMarkdown(c) {
