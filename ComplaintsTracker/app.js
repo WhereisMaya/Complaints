@@ -1852,7 +1852,7 @@
       }
     });
     qs("#exportJsonBtn").addEventListener("click", () => {
-      const bundle = { complaints: Data.complaints, sars: Data.sars, phso: Data.phsoCases, legal: Data.legalCases, exportedAt: new Date().toISOString() };
+      const bundle = { complaints: Data.complaints, sars: Data.sars, phso: Data.phsoCases, legal: Data.legalCases, exportedAt: new Date().toISOString(), user: (Data.session && Data.session.user && Data.session.user.username) || 'public' };
       downloadBlob(JSON.stringify(bundle, null, 2), `complaints-export-${Date.now()}.json`);
     });
     qs('#downloadTestBtn').addEventListener('click', async () => {
@@ -1896,10 +1896,10 @@
       e.preventDefault();
       const redact = confirm('Export REDACTED JSON? Click Cancel for normal.');
       if (redact) {
-        const bundle = { complaints: Data.complaints.map(c => redactComplaintDeep(c)), exportedAt: new Date().toISOString(), redacted: true };
+        const bundle = { complaints: Data.complaints.map(c => redactComplaintDeep(c)), exportedAt: new Date().toISOString(), redacted: true, user: (Data.session && Data.session.user && Data.session.user.username) || 'public' };
         downloadBlob(JSON.stringify(bundle, null, 2), `complaints-export-redacted-${Date.now()}.json`);
       } else {
-        const bundle = { complaints: Data.complaints, sars: Data.sars, phso: Data.phsoCases, legal: Data.legalCases, exportedAt: new Date().toISOString() };
+        const bundle = { complaints: Data.complaints, sars: Data.sars, phso: Data.phsoCases, legal: Data.legalCases, exportedAt: new Date().toISOString(), user: (Data.session && Data.session.user && Data.session.user.username) || 'public' };
         downloadBlob(JSON.stringify(bundle, null, 2), `complaints-export-${Date.now()}.json`);
       }
     });
@@ -2096,6 +2096,7 @@
   }
 
   function renderAll() {
+    try { Data.reloadForCurrentUser(); } catch {}
     renderFilters();
     computeMetrics();
     renderComplaintsList();
