@@ -447,16 +447,18 @@
               <div class="form-row">
                 <label>Font
                   <select id="customFontSel">
-                    <option value="">Custom…</option>
                     <option value="system-ui, -apple-system, Segoe UI, Roboto">System UI</option>
                     <option value="Inter, system-ui, -apple-system, Segoe UI, Roboto">Inter</option>
                     <option value="Roboto, system-ui, -apple-system, Segoe UI">Roboto</option>
+                    <option value="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif">Segoe UI</option>
+                    <option value="'Helvetica Neue', Arial, sans-serif">Helvetica Neue</option>
                     <option value="Georgia, 'Times New Roman', serif">Georgia</option>
                     <option value="'Merriweather', Georgia, serif">Merriweather</option>
                     <option value="'SF Pro Display', -apple-system, system-ui">SF Pro</option>
+                    <option value="'PT Serif', Georgia, serif">PT Serif</option>
+                    <option value="'Source Sans Pro', system-ui, -apple-system, Segoe UI">Source Sans Pro</option>
                   </select>
                 </label>
-                <label>Custom Font Stack<input id="customFont" value="${font.replace(/\"/g,'&quot;')}" /></label>
                 <label>Text Color<input id="customText" type="color" value="${text||'#000000'}" /></label>
               </div>
               <div class="form-row">
@@ -505,7 +507,7 @@
     });
     qs('#customApply').addEventListener('click', () => {
       const newPrefs = {
-        font: (qs('#customFontSel').value||qs('#customFont').value||''),
+        font: (qs('#customFontSel').value||''),
         text: qs('#customText').value||'',
         bg: qs('#customBg').value||'',
         accent: qs('#customAccent').value||'',
