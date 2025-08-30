@@ -222,12 +222,16 @@
       } catch { this.complaints = []; this.sars = []; this.phsoCases = []; this.legalCases = []; this.accountability = []; }
     },
     async _loadFromFiles() {
-      const [complaintsRes, sarsRes] = await Promise.all([
-        fetch("data/complaints.json"),
-        fetch("data/sars.json"),
-      ]);
-      this.complaints = await complaintsRes.json();
-      this.sars = await sarsRes.json();
+      try {
+        const [complaintsRes, sarsRes] = await Promise.all([
+          fetch("data/complaints.json").catch(() => ({ ok:false, json: async()=>[] })),
+          fetch("data/sars.json").catch(() => ({ ok:false, json: async()=>[] })),
+        ]);
+        try { this.complaints = await complaintsRes.json(); } catch { this.complaints = []; }
+        try { this.sars = await sarsRes.json(); } catch { this.sars = []; }
+      } catch {
+        this.complaints = []; this.sars = [];
+      }
     },
     save() {
       localStorage.setItem(this.key(STORAGE_KEYS.complaints), JSON.stringify(this.complaints));
@@ -2150,6 +2154,7 @@
     if (secureLoginBtn) secureLoginBtn.addEventListener('click', () => openAuthModal('login'));
     if (logoutBtn) logoutBtn.addEventListener('click', () => {
       Data.session.user = null; Data.save(); updateUi(); alert('Logged out');
+      Data.reloadForCurrentUser();
       renderAll();
       if (!(Data.session && Data.session.user)) injectDemoData();
     });
@@ -2215,6 +2220,7 @@
           qsa('.panel').forEach(p => p.classList.remove('active'));
           qs('#panel-all').classList.add('active');
           Data.reloadForCurrentUser(); renderAll();
+          const lb = qs('#logoutBtn'); if (lb) lb.style.display = '';
           alert('Logged in as admin');
           return;
         }
@@ -2224,6 +2230,7 @@
         Data.save(); Data.reloadForCurrentUser();
         close();
         renderAll();
+        const lb = qs('#logoutBtn'); if (lb) lb.style.display = '';
         alert('Logged in');
       });
     };
