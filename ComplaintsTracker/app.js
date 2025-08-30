@@ -505,6 +505,11 @@
                     <option value="midnight">Midnight</option>
                     <option value="ocean">Ocean</option>
                     <option value="forest">Forest</option>
+                    <option value="sunset">Sunset</option>
+                    <option value="slate">Slate</option>
+                    <option value="mint">Mint</option>
+                    <option value="rose">Rose</option>
+                    <option value="amber">Amber</option>
                     <option value="highcontrast">High Contrast</option>
                   </select>
                 </label>
@@ -528,10 +533,52 @@
     presetSel?.addEventListener('change', () => {
       const v = presetSel.value;
       const set = (id,val) => { const el=qs(id); if (el) el.value = val; };
-      if (v === 'midnight') { set('#customText','#e6e6e6'); set('#customBg','#0b0c10'); set('#customAccent','#3aa0ff'); }
-      if (v === 'ocean') { set('#customText','#0b2239'); set('#customBg','#e8f4ff'); set('#customAccent','#0a66d1'); }
-      if (v === 'forest') { set('#customText','#0f2e1d'); set('#customBg','#ecf8f1'); set('#customAccent','#0f8c55'); }
-      if (v === 'highcontrast') { set('#customText','#000000'); set('#customBg','#ffffff'); set('#customAccent','#000000'); const hc=qs('#customHC'); if (hc) hc.checked=true; }
+      // defaults per preset: text, bg (page), accent, elev (cards), headerBg, dark/light overrides
+      if (v === 'midnight') {
+        set('#customText','#e6e6e6'); set('#customBg','#0b0c10'); set('#customAccent','#3aa0ff');
+        set('#customElev','#121318'); set('#customHeaderBg','#121318');
+        set('#customDarkBg','#0b0c10'); set('#customLightBg','#eef1f5');
+      }
+      if (v === 'ocean') {
+        set('#customText','#0b2239'); set('#customBg','#e8f4ff'); set('#customAccent','#0a66d1');
+        set('#customElev','#ffffff'); set('#customHeaderBg','#d6ecff');
+        set('#customDarkBg','#0b0c10'); set('#customLightBg','#e8f4ff');
+      }
+      if (v === 'forest') {
+        set('#customText','#0f2e1d'); set('#customBg','#ecf8f1'); set('#customAccent','#0f8c55');
+        set('#customElev','#ffffff'); set('#customHeaderBg','#d9f1e5');
+        set('#customDarkBg','#0b0c10'); set('#customLightBg','#ecf8f1');
+      }
+      if (v === 'sunset') {
+        set('#customText','#2b0e0e'); set('#customBg','#fff1e6'); set('#customAccent','#ff6b6b');
+        set('#customElev','#ffffff'); set('#customHeaderBg','#ffd3ba');
+        set('#customDarkBg','#1a0f0f'); set('#customLightBg','#fff1e6');
+      }
+      if (v === 'slate') {
+        set('#customText','#1e2328'); set('#customBg','#f2f4f7'); set('#customAccent','#4a5568');
+        set('#customElev','#ffffff'); set('#customHeaderBg','#e2e8f0');
+        set('#customDarkBg','#0f1115'); set('#customLightBg','#f2f4f7');
+      }
+      if (v === 'mint') {
+        set('#customText','#063b2d'); set('#customBg','#e9fbf4'); set('#customAccent','#10b981');
+        set('#customElev','#ffffff'); set('#customHeaderBg','#c8f7e6');
+        set('#customDarkBg','#0b0c10'); set('#customLightBg','#e9fbf4');
+      }
+      if (v === 'rose') {
+        set('#customText','#3d0c1c'); set('#customBg','#fff0f5'); set('#customAccent','#e11d48');
+        set('#customElev','#ffffff'); set('#customHeaderBg','#ffdce6');
+        set('#customDarkBg','#13070e'); set('#customLightBg','#fff0f5');
+      }
+      if (v === 'amber') {
+        set('#customText','#3a2a00'); set('#customBg','#fff7e6'); set('#customAccent','#f59e0b');
+        set('#customElev','#ffffff'); set('#customHeaderBg','#fde68a');
+        set('#customDarkBg','#0b0c10'); set('#customLightBg','#fff7e6');
+      }
+      if (v === 'highcontrast') {
+        set('#customText','#000000'); set('#customBg','#ffffff'); set('#customAccent','#000000');
+        set('#customElev','#ffffff'); set('#customHeaderBg','#ffffff');
+        const hc=qs('#customHC'); if (hc) hc.checked=true;
+      }
     });
     qs('#customApply').addEventListener('click', () => {
       const newPrefs = {
