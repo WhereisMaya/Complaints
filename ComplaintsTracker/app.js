@@ -490,6 +490,10 @@
                 <label>Accent Color<input id="customAccent" type="color" value="${accent||'#0a66d1'}" /></label>
               </div>
               <div class="form-row">
+                <label>Panel/Card Color<input id="customElev" type="color" value="${(prefs.elev||'')||'#ffffff'}" /></label>
+                <label>Header/Tab Color<input id="customHeaderBg" type="color" value="${(prefs.headerBg||'')||'#ffffff'}" /></label>
+              </div>
+              <div class="form-row">
                 <label>Dark Theme Background<input id="customDarkBg" type="color" value="${(prefs.darkBg||'')||'#0b0c10'}" /></label>
                 <label>Light Theme Background<input id="customLightBg" type="color" value="${(prefs.lightBg||'')||'#eef1f5'}" /></label>
               </div>
@@ -535,6 +539,8 @@
         text: qs('#customText').value||'',
         bg: qs('#customBg').value||'',
         accent: qs('#customAccent').value||'',
+        elev: qs('#customElev').value||'',
+        headerBg: qs('#customHeaderBg').value||'',
         darkBg: qs('#customDarkBg').value||'',
         lightBg: qs('#customLightBg').value||'',
         fontSize: parseInt(qs('#customFontSize').value||'14',10),
@@ -560,6 +566,8 @@
     if (prefs.darkBg && document.documentElement.dataset.theme === 'dark') root.style.setProperty('--bg', prefs.darkBg);
     if (prefs.lightBg && document.documentElement.dataset.theme === 'light') root.style.setProperty('--bg', prefs.lightBg);
     if (prefs.accent) root.style.setProperty('--accent', prefs.accent);
+    if (prefs.elev) root.style.setProperty('--elev', prefs.elev);
+    if (prefs.headerBg) root.style.setProperty('--header-bg', prefs.headerBg);
     if (prefs.font) document.body.style.fontFamily = prefs.font;
     if (prefs.fontSize) document.body.style.fontSize = prefs.fontSize + 'px';
     if (prefs.highContrast) {
@@ -669,27 +677,54 @@
   function renderComplaintsList(list) {
     const container = qs("#complaintsList");
     container.innerHTML = "";
-    (list || Data.complaints).forEach(c => {
-      const div = document.createElement("div");
-      div.className = "list-item";
-      div.innerHTML = `
-        <div>
-          <div><strong>${c.title}</strong></div>
-          <div class="list-meta">${c.institution || ""} • ${fmtDate(c.dateFiled)} • ${c.status || ""}</div>
-          <div class="list-meta">ID: <span class="mono">${c.id}</span></div>
-          <div class="stack">
-            ${(c.escalationPath||[]).map(e => `<span class="chip">${e}</span>`).join(" ")}
-            ${c.isPasswordProtected ? '<span class="chip protected">Protected</span>' : ''}
-            ${c.linkedSAR ? '<span class="chip">Linked SAR: ' + c.linkedSAR + '</span>' : ''}
-            ${renderStatusChip(c)}
+    const gb = qs('#groupBySelect');
+    if (gb) gb.onchange = () => renderComplaintsList();
+    const entries = (list || Data.complaints);
+    const groupBy = (gb && gb.value) || '';
+    if (groupBy === 'institution') {
+      const groups = {};
+      entries.forEach(c => { const key = c.institution || 'Unspecified'; (groups[key] = groups[key] || []).push(c); });
+      Object.keys(groups).sort().forEach(key => {
+        const header = document.createElement('div'); header.className = 'section-title'; header.textContent = key; container.appendChild(header);
+        groups[key].forEach(c => {
+          const div = document.createElement("div");
+          div.className = "list-item";
+          div.innerHTML = `
+            <div>
+              <div><strong>${c.title}</strong></div>
+              <div class="list-meta">${fmtDate(c.dateFiled)} • ${c.status || ""}</div>
+              <div class="list-meta">ID: <span class="mono">${c.id}</span></div>
+            </div>
+            <div class="list-actions">
+              <button class="btn secondary" data-action="view" data-id="${c.id}">View</button>
+              <button class="btn secondary" data-action="sar" data-id="${c.id}" ${c.linkedSAR?"":"disabled"}>SAR</button>
+            </div>`;
+          container.appendChild(div);
+        });
+      });
+    } else {
+      entries.forEach(c => {
+        const div = document.createElement("div");
+        div.className = "list-item";
+        div.innerHTML = `
+          <div>
+            <div><strong>${c.title}</strong></div>
+            <div class="list-meta">${c.institution || ""} • ${fmtDate(c.dateFiled)} • ${c.status || ""}</div>
+            <div class="list-meta">ID: <span class="mono">${c.id}</span></div>
+            <div class="stack">
+              ${(c.escalationPath||[]).map(e => `<span class="chip">${e}</span>`).join(" ")}
+              ${c.isPasswordProtected ? '<span class="chip protected">Protected</span>' : ''}
+              ${c.linkedSAR ? '<span class="chip">Linked SAR: ' + c.linkedSAR + '</span>' : ''}
+              ${renderStatusChip(c)}
+            </div>
           </div>
-        </div>
-        <div class="list-actions">
-          <button class="btn secondary" data-action="view" data-id="${c.id}">View</button>
-          <button class="btn secondary" data-action="sar" data-id="${c.id}" ${c.linkedSAR?"":"disabled"}>SAR</button>
-        </div>`;
-      container.appendChild(div);
-    });
+          <div class="list-actions">
+            <button class="btn secondary" data-action="view" data-id="${c.id}">View</button>
+            <button class="btn secondary" data-action="sar" data-id="${c.id}" ${c.linkedSAR?"":"disabled"}>SAR</button>
+          </div>`;
+        container.appendChild(div);
+      });
+    }
 
     container.addEventListener("click", (e) => {
       const t = e.target;
@@ -1560,6 +1595,8 @@
           <button class="btn secondary" id="sarSetIcoRefBtn">Set ICO Ref</button>
         </div>
         <div class="list-meta">ICO Ref: <span id="icoRefSpan">${sar.icoRef||'—'}</span></div>
+        <div class="section-title" style="margin-top:10px;">Logs</div>
+        <div class="list" id="sarLogs">${(sar.logs||[]).map(l => `<div class=\"list-item\"><div>${fmtDate(l.date)||''} — ${l.event||''}</div></div>`).join('') || '<div class="list-item"><div>No logs</div></div>'}</div>
       </div>
     `;
     qs('#icoEscBtn').addEventListener('click', () => openIcoTemplateModal(sar));
