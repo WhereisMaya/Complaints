@@ -445,7 +445,18 @@
           <div class="modal-body">
             <div class="form">
               <div class="form-row">
-                <label>Font Stack<input id="customFont" value="${font.replace(/\"/g,'&quot;')}" /></label>
+                <label>Font
+                  <select id="customFontSel">
+                    <option value="">Custom…</option>
+                    <option value="system-ui, -apple-system, Segoe UI, Roboto">System UI</option>
+                    <option value="Inter, system-ui, -apple-system, Segoe UI, Roboto">Inter</option>
+                    <option value="Roboto, system-ui, -apple-system, Segoe UI">Roboto</option>
+                    <option value="Georgia, 'Times New Roman', serif">Georgia</option>
+                    <option value="'Merriweather', Georgia, serif">Merriweather</option>
+                    <option value="'SF Pro Display', -apple-system, system-ui">SF Pro</option>
+                  </select>
+                </label>
+                <label>Custom Font Stack<input id="customFont" value="${font.replace(/\"/g,'&quot;')}" /></label>
                 <label>Text Color<input id="customText" type="color" value="${text||'#000000'}" /></label>
               </div>
               <div class="form-row">
@@ -490,7 +501,7 @@
     });
     qs('#customApply').addEventListener('click', () => {
       const newPrefs = {
-        font: qs('#customFont').value||'',
+        font: (qs('#customFontSel').value||qs('#customFont').value||''),
         text: qs('#customText').value||'',
         bg: qs('#customBg').value||'',
         accent: qs('#customAccent').value||'',
@@ -1099,6 +1110,7 @@
       const baseComplaint = {
         title: data.title,
         dateFiled: data.dateFiled,
+        type: data.type || '',
         institution: data.institution,
         contactPerson: data.contactPerson || "",
         complaintContent: data.complaintContent,
@@ -1218,6 +1230,11 @@
             <button class="btn" id="shareRedactedBtn">Share Redacted</button>
             <button class="btn secondary" id="shareFullBtn">Share Full</button>
             <button class="btn secondary" id="shareConcernsBtn">Share Concerns</button>
+            <button class="btn secondary" id="suggestEscBtn">Suggest Escalation</button>
+            <button class="btn secondary" id="markLegalBtn">Mark as Legal</button>
+            <button class="btn secondary" id="escTemplateBtn">Escalation Template</button>
+            <button class="btn secondary" id="exportMdBtn">Export Markdown</button>
+            <button class="btn secondary" id="exportNbBtn">Export Notebook</button>
             <button class="btn secondary" id="editBtn">Edit</button>
           </div>
           <div class="form-actions" style="margin-top:8px;">
@@ -1348,6 +1365,25 @@
     if (shareFullBtn) shareFullBtn.addEventListener('click', () => shareStandaloneComplaint(complaint, false));
     const shareConsBtn = qs('#shareConcernsBtn');
     if (shareConsBtn) shareConsBtn.addEventListener('click', () => openShareConcernsModal(complaint));
+    const suggestBtn = qs('#suggestEscBtn');
+    if (suggestBtn) suggestBtn.addEventListener('click', () => {
+      const path = suggestEscalationPath(complaint.type||'');
+      alert(`Suggested escalation for type "${complaint.type||'Unknown'}": ${path.join(' → ')}`);
+    });
+    const markLegalBtn = qs('#markLegalBtn');
+    if (markLegalBtn) markLegalBtn.addEventListener('click', async () => {
+      complaint.status = 'Legal';
+      await appendHistory(complaint, 'Marked as Legal');
+      Data.upsertComplaint(complaint);
+      await autoCreateLegalCase(complaint, 'Marked as Legal');
+      showLegalTab(complaint.id);
+    });
+    const escTplBtn = qs('#escTemplateBtn');
+    if (escTplBtn) escTplBtn.addEventListener('click', () => openEscalationTemplateModal(complaint));
+    const exportMdBtn = qs('#exportMdBtn');
+    if (exportMdBtn) exportMdBtn.addEventListener('click', () => exportComplaintMarkdown(complaint));
+    const exportNbBtn = qs('#exportNbBtn');
+    if (exportNbBtn) exportNbBtn.addEventListener('click', () => exportComplaintNotebook(complaint));
     if (unlockBtn) unlockBtn.addEventListener("click", async () => {
       const pwd = prompt("Enter complaint password:") || "";
       try {
@@ -1768,6 +1804,63 @@
     downloadBlob(lines.join('\n'), `complaints-calendar-${Date.now()}.ics`, 'text/calendar');
   }
 
+  function suggestEscalationPath(type) {
+    const map = {
+      'NHS': ['PHSO'],
+      'Police': ['IOPC'],
+      'Data': ['ICO'],
+      'Regulator': ['PSA'],
+      'SAR Delay': ['ICO']
+    };
+    return map[type] || ['Unknown'];
+  }
+
+  function openEscalationTemplateModal(complaint) {
+    const root = qs('#modalRoot'); if (!root) return;
+    const path = suggestEscalationPath(complaint.type||'');
+    const target = path[0] || 'Regulator';
+    const body = `Dear ${complaint.institution||'Sir/Madam'},\n\nI wish to escalate complaint ${complaint.id} (${complaint.title}).\nSummary:\n- ${complaint.complaintContent||''}\n\nPlease acknowledge and advise next steps.\n\nKind regards`;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="escTplModal">
+        <div class="modal">
+          <div class="modal-header"><div class="section-title">Escalation Template — ${target}</div><button class="btn secondary" id="escTplClose">Close</button></div>
+          <div class="modal-body"><div class="form"><div class="form-row"><label>To<input id="escTo" placeholder="email@example.org" /></label><label>Subject<input id="escSub" value="Escalation: ${complaint.id}" /></label></div><div class="form-row"><label>Body<textarea id="escBody" rows="8">${body}</textarea></label></div></div></div>
+          <div class="modal-footer form-actions"><button class="btn" id="escMail">Open Email</button><button class="btn secondary" id="escCopy">Copy</button></div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#escTplClose').addEventListener('click', close);
+    qs('#escTplModal').addEventListener('click', (e) => { if (e.target.id === 'escTplModal') close(); });
+    qs('#escMail').addEventListener('click', () => { const to=qs('#escTo').value||''; const sub=encodeURIComponent(qs('#escSub').value||''); const b=encodeURIComponent(qs('#escBody').value||''); window.location.href=`mailto:${to}?subject=${sub}&body=${b}`; });
+    qs('#escCopy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(qs('#escBody').value||''); alert('Copied'); } catch { alert('Copy failed'); } });
+  }
+
+  function exportComplaintMarkdown(c) {
+    const lines = [];
+    lines.push(`# ${c.title}`);
+    lines.push(`ID: ${c.id}`);
+    lines.push(`Type: ${c.type||''}`);
+    lines.push(`Institution: ${c.institution}`);
+    lines.push(`Date Filed: ${c.dateFiled}`);
+    lines.push(`Status: ${c.status}`);
+    lines.push('');
+    lines.push('## Timeline');
+    (c.history||[]).forEach(h => lines.push(`- ${h.date||''} ${h.event||''}`));
+    lines.push('');
+    lines.push('## Concerns');
+    (c.concerns||[]).forEach((cc, i) => { lines.push(`### ${i+1}. ${cc.summary}`); if (cc.details) lines.push(cc.details); });
+    downloadBlob(lines.join('\n'), `${c.id}.md`, 'text/markdown');
+  }
+
+  function exportComplaintNotebook(c) {
+    const nb = { cells: [
+      { cell_type: 'markdown', metadata: {}, source: [`# ${c.title}\nID: ${c.id}\nType: ${c.type||''}\nInstitution: ${c.institution}\nStatus: ${c.status}\n`] },
+      { cell_type: 'markdown', metadata: {}, source: ['## Timeline\n', ...(c.history||[]).map(h=>`- ${h.date||''} ${h.event||''}\n`)] },
+      { cell_type: 'code', metadata: {}, execution_count: null, outputs: [], source: [`log = ${JSON.stringify(c, null, 2)}\nprint('Entries:', len(log.get('concerns', [])))\n`] }
+    ], metadata: { kernelspec: { display_name: 'Python 3', name: 'python3' } }, nbformat: 4, nbformat_minor: 5 };
+    downloadBlob(JSON.stringify(nb, null, 2), `${c.id}.ipynb`, 'application/json');
+  }
+
   function shareStandaloneComplaint(complaint, redacted) {
     const data = redacted ? redactComplaintDeep(complaint) : complaint;
     const doc = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Complaint ${data.id}${redacted?' (Redacted)':''}</title><style>body{font:14px system-ui;margin:16px} .card{border:1px solid #ccc;border-radius:8px;padding:12px;margin:8px 0} .list{display:grid;gap:8px} .list-item{border:1px solid #eee;border-radius:6px;padding:8px} .muted{color:#666}</style></head><body><h2>Complaint ${data.id}${redacted?' (Redacted)':''}</h2><div class="card"><div><strong>${data.title}</strong></div><div class="muted">${data.institution||''} • ${data.status||''} • ${data.dateFiled||''}</div><div style="margin-top:8px;">${data.complaintContent||''}</div></div><div class="card"><div><strong>Concerns</strong></div><div class="list">${(data.concerns||[]).map(c => `<div class=\"list-item\"><div><strong>${c.summary||''}</strong></div><div class=\"muted\">Decision: ${c.decisionMaker||'—'} • ${c.responseDate||''}</div><div>${c.details||''}</div></div>`).join('')||'<div class=\"list-item\">None</div>'}</div></div><div class="card"><div class="muted">Generated ${new Date().toLocaleString()}</div></div><script>/* offline */</script></body></html>`;
@@ -1852,6 +1945,7 @@
     renderFilters();
     computeMetrics();
     renderComplaintsList();
+    renderOpenEntries();
     renderSearch();
     populateLinkedSarSelect();
     populateInstitutionSelect();
@@ -1862,6 +1956,21 @@
     renderResources();
     computeWarnings();
     renderActionRequired?.();
+  }
+
+  function renderOpenEntries() {
+    const container = qs('#openEntriesContainer'); if (!container) return;
+    const entries = [
+      ...Data.complaints.map(c => ({ kind: 'Complaint', title: c.title, date: c.dateFiled, status: c.status, id: c.id })),
+      ...Data.sars.map(s => ({ kind: 'SAR', title: s.title, date: s.dateFiled, status: s.status, id: s.id }))
+    ].filter(e => !/(resolved|closed)/i.test(e.status||''));
+    container.innerHTML = entries.map(e => `<div class="list-item"><div><div><strong>${e.title}</strong></div><div class="list-meta">${e.kind} • ${fmtDate(e.date)} • ${e.status||''}</div></div><div><button class="btn secondary" data-open="${e.kind}:${e.id}">Open</button></div></div>`).join('') || '<div class="list-item"><div>No open entries</div></div>';
+    container.onclick = (ev) => {
+      const btn = ev.target.closest('button[data-open]'); if (!btn) return;
+      const [kind,id] = btn.getAttribute('data-open').split(':');
+      if (kind==='Complaint') { const c = Data.getComplaint(id); if (c) showComplaintDetails(c); }
+      if (kind==='SAR') { showLinkedSar(id); }
+    };
   }
 
   function renderLegalOverview() {

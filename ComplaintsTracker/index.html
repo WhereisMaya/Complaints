@@ -70,6 +70,10 @@
         <div class="section-title">Action Required</div>
         <div id="actionRequiredContainer" class="list"></div>
       </div>
+      <div class="card">
+        <div class="section-title">Open Entries</div>
+        <div id="openEntriesContainer" class="list"></div>
+      </div>
       <div class="quick-actions">
         <input id="searchInput" class="input" placeholder="Search by title, institution, status, date..." />
         <select id="filterInstitution" class="input"></select>
@@ -87,6 +91,7 @@
       <div class="list-header">
         <div>Complaints</div>
         <div class="list-actions">
+          <select id="groupBySelect" class="input"><option value="">Group: None</option><option value="institution">Group by Institution</option></select>
           <button id="refreshBtn" class="btn secondary">Refresh</button>
           <button id="exportListCsvBtn" class="btn secondary">Export List CSV</button>
         </div>
@@ -101,6 +106,7 @@
           <label>Date Filed<input name="dateFiled" type="date" required /></label>
         </div>
         <div class="form-row">
+          <label>Type<select name="type"><option value="">Select type</option><option>Police</option><option>NHS</option><option>Data</option><option>Regulator</option><option>SAR Delay</option><option>Other</option></select></label>
           <label>Institution<input name="institution" id="institutionSelect" list="institutionList" placeholder="Select or type..." required /></label>
           <datalist id="institutionList"></datalist>
           <div style="display:flex; align-items:end;">
