@@ -18,7 +18,7 @@ h1 { font-size: 18px; margin: 0; }
 .tab[data-tab="accountability"]:not(.active) { color: #3498db; }
 .tab[data-tab="calendar"]:not(.active) { color: #1abc9c; }
 .tab[data-tab="resources"]:not(.active) { color: #ff1493; }
-.tab[data-tab="institutions"]:not(.active) { color: #0077b6; }
+.tab[data-tab="institutions"]:not(.active) { color: #40e0d0; }
 main { padding: 16px; }
 .panel { display: none; }
 .panel.active { display: block; }
@@ -38,6 +38,8 @@ main { padding: 16px; }
 .form-row { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 .form-row label { display: grid; gap: 6px; color: var(--muted); }
 .form-actions { display: flex; gap: 8px; }
+.form-actions { flex-wrap: wrap; }
+.btn { white-space: nowrap; }
 .vertical-actions { flex-direction: column; align-items: flex-start; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--elev); font-size: 12px; }
 .chip.escalated { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
@@ -89,6 +91,9 @@ input:checked + .slider:before { transform: translateX(18px); }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-day { border: 1px dashed var(--border); border-radius: 4px; min-height: 24px; text-align: center; color: var(--muted); }
 .cal-day.cal-hit { background: color-mix(in srgb, #f1c40f 28%, transparent); color: var(--text); border-style: solid; }
+.cal-day.status-open { background: color-mix(in srgb, #f1c40f 18%, transparent); }
+.cal-day.status-escalated { background: color-mix(in srgb, #ff6b6b 20%, transparent); }
+.cal-day.status-resolved { background: color-mix(in srgb, #7bd389 20%, transparent); }
 
 /* modal */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
@@ -96,4 +101,11 @@ input:checked + .slider:before { transform: translateX(18px); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px solid var(--border); }
 .modal-body { padding: 12px; }
 .modal-footer { padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+/* toast notifications */
+.toast-container { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 2000; }
+.toast { background: var(--elev); color: var(--text); border: 1px solid var(--border); border-left: 4px solid var(--accent); padding: 10px 12px; border-radius: 8px; min-width: 220px; box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
+.toast.success { border-left-color: var(--accent-2); }
+.toast.error { border-left-color: var(--danger); }
+.toast.warn { border-left-color: #f1c40f; }
 

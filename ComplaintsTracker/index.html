@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Complaints Tracker</title>
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" href="../SAR/favicon.ico" />
+  <link rel="icon" href="favicon.ico" type="image/x-icon" />
   <meta name="color-scheme" content="light dark" />
   <meta name="description" content="Standalone Complaints Tracker - log, track, export complaints." />
 </head>
@@ -47,7 +47,7 @@
     <button class="tab" data-tab="all" role="tab" aria-selected="false">🗂️ All Complaints</button>
     <button class="tab" data-tab="add" role="tab" aria-selected="false">➕ Add Complaint</button>
     <button class="tab" data-tab="details" role="tab" aria-selected="false">📝 Complaint Details</button>
-    <button class="tab" data-tab="linked-sar" role="tab" aria-selected="false">📄 Linked SAR</button>
+    <button class="tab" data-tab="linked-sar" role="tab" aria-selected="false">📄 SAR</button>
     <button class="tab" data-tab="phso" role="tab" aria-selected="false">🏛️ PHSO</button>
     <button class="tab" data-tab="accountability" role="tab" aria-selected="false">⚖️ Accountability</button>
     <button class="tab" data-tab="calendar" role="tab" aria-selected="false">🗓️ Calendar</button>
@@ -79,6 +79,9 @@
         <select id="filterInstitution" class="input"></select>
         <select id="filterStatus" class="input"></select>
         <input id="filterDate" type="date" class="input" />
+        <select id="filterType" class="input"><option value="">All Types</option><option>Police</option><option>NHS</option><option>Data</option><option>Regulator</option><option>SAR Delay</option><option>Other</option></select>
+        <input id="dateFrom" type="date" class="input" />
+        <input id="dateTo" type="date" class="input" />
         <select id="segmentSelect" class="input" title="Saved segments"></select>
         <button id="segmentSaveBtn" class="btn secondary">Save Segment</button>
         <button id="segmentDeleteBtn" class="btn secondary">Delete</button>
@@ -113,6 +116,9 @@
             <button type="button" id="addInstitutionBtn" class="btn secondary">Add Institution</button>
           </div>
           <label>Contact Person<input name="contactPerson" id="contactPerson" /></label>
+        </div>
+        <div class="form-row">
+          <label>Template<select id="templateSelect"><option value="">No template</option><option value="police">Police Misconduct</option><option value="nhs">NHS Complaint</option><option value="data">Data Breach</option></select></label>
         </div>
         <div class="form-row">
           <label>Institution Address<input name="institutionAddress" id="institutionAddress" placeholder="Auto-filled when institution selected" /></label>
@@ -218,6 +224,7 @@
   </footer>
 
   <script src="app.js"></script>
+  <div class="toast-container" id="toastContainer"></div>
 </body>
 <!-- Built for clarity, extensibility, and legal-grade integrity. -->
 </html>

@@ -652,6 +652,7 @@
     const statusSel = qs("#filterStatus");
     const dateSel = qs('#filterDate');
     const segSel = qs('#segmentSelect');
+    const typeSel = qs('#filterType');
     const institutions = Array.from(new Set(Data.complaints.map(c => c.institution).filter(Boolean))).sort();
     const statuses = Array.from(new Set(Data.complaints.map(c => c.status).filter(Boolean))).sort();
     instSel.innerHTML = `<option value="">All Institutions</option>` + institutions.map(i => `<option>${i}</option>`).join("");
@@ -663,6 +664,7 @@
       const segments = JSON.parse(localStorage.getItem('complaintsTracker.segments')||'[]');
       segSel.innerHTML = `<option value="">Segments</option>` + segments.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
     }
+    if (typeSel && !typeSel.value) typeSel.value = '';
   }
 
   function computeMetrics() {
@@ -796,18 +798,27 @@
     const statusSel = qs("#filterStatus");
     const dateSel = qs('#filterDate');
     const segSel = qs('#segmentSelect');
+    const typeSel = qs('#filterType');
+    const dateFrom = qs('#dateFrom');
+    const dateTo = qs('#dateTo');
     const results = qs("#searchResults");
     const apply = () => {
       const q = (input.value || "").toLowerCase();
       const inst = instSel.value;
       const stat = statusSel.value;
       const date = dateSel && dateSel.value;
+      const type = typeSel && typeSel.value;
+      const from = dateFrom && dateFrom.value;
+      const to = dateTo && dateTo.value;
       const filtered = Data.complaints.filter(c => {
         const matchesQ = !q || JSON.stringify(c).toLowerCase().includes(q);
         const matchesI = !inst || c.institution === inst;
         const matchesS = !stat || c.status === stat;
         const matchesD = !date || (c.dateFiled||'').slice(0,10) === date;
-        return matchesQ && matchesI && matchesS && matchesD;
+        const matchesT = !type || (c.type||'') === type;
+        const df = (c.dateFiled||'').slice(0,10);
+        const inRange = (!from || df >= from) && (!to || df <= to);
+        return matchesQ && matchesI && matchesS && matchesD && matchesT && inRange;
       });
       results.innerHTML = "";
       if (!Data.complaints.length) {
@@ -821,7 +832,7 @@
         results.appendChild(div);
       });
     };
-    [input, instSel, statusSel, dateSel, segSel].filter(Boolean).forEach(el => el.addEventListener("input", apply));
+    [input, instSel, statusSel, dateSel, segSel, typeSel, dateFrom, dateTo].filter(Boolean).forEach(el => el.addEventListener("input", apply));
     if (segSel) segSel.addEventListener('change', () => {
       const id = segSel.value; if (!id) return;
       const segments = JSON.parse(localStorage.getItem('complaintsTracker.segments')||'[]');
@@ -935,6 +946,15 @@
     });
     const addBtn = qs('#addInstitutionBtn');
     if (addBtn) addBtn.onclick = () => openAddInstitutionModal(sel);
+    const tpl = qs('#templateSelect');
+    if (tpl) tpl.onchange = () => {
+      const v = tpl.value;
+      const content = qs('[name="complaintContent"]');
+      if (!content) return;
+      if (v === 'police') content.value = 'I wish to raise a complaint regarding police misconduct...';
+      if (v === 'nhs') content.value = 'I wish to raise a complaint regarding NHS services...';
+      if (v === 'data') content.value = 'I wish to report a data breach under UK GDPR...';
+    };
   }
 
   function exportInstitutionsCsv(rows) {
@@ -1355,6 +1375,8 @@
             <button class="btn secondary" id="escTemplateBtn">Escalation Template</button>
             <button class="btn secondary" id="exportMdBtn">Export Markdown</button>
             <button class="btn secondary" id="exportNbBtn">Export Notebook</button>
+            <button class="btn secondary" id="editComplaintBtn">Edit Complaint</button>
+            <button class="btn secondary" id="deleteComplaintBtn">Delete Complaint</button>
             <button class="btn secondary" id="editBtn">Edit</button>
           </div>
           <div class="form-actions" style="margin-top:8px;">
@@ -1504,6 +1526,19 @@
     if (exportMdBtn) exportMdBtn.addEventListener('click', () => exportComplaintMarkdown(complaint));
     const exportNbBtn = qs('#exportNbBtn');
     if (exportNbBtn) exportNbBtn.addEventListener('click', () => exportComplaintNotebook(complaint));
+    const editCB = qs('#editComplaintBtn');
+    if (editCB) editCB.addEventListener('click', () => openEditComplaintModal(complaint));
+    const delCB = qs('#deleteComplaintBtn');
+    if (delCB) delCB.addEventListener('click', async () => {
+      if (!confirm('Delete this complaint? This cannot be undone.')) return;
+      Data.complaints = Data.complaints.filter(x => x.id !== complaint.id);
+      Data.save();
+      showToast('Complaint deleted', 'warn');
+      renderAll();
+      qsa('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === 'all'));
+      qsa('.panel').forEach(p => p.classList.remove('active'));
+      qs('#panel-all').classList.add('active');
+    });
     if (unlockBtn) unlockBtn.addEventListener("click", async () => {
       const pwd = prompt("Enter complaint password:") || "";
       try {
@@ -2006,6 +2041,13 @@
     downloadBlob(lines.join('\n'), `${c.id}.md`, 'text/markdown');
   }
 
+  function showToast(message, type = 'success') {
+    const cont = qs('#toastContainer'); if (!cont) return alert(message);
+    const d = document.createElement('div'); d.className = `toast ${type}`; d.textContent = message;
+    cont.appendChild(d);
+    setTimeout(() => { try { cont.removeChild(d); } catch {} }, 3500);
+  }
+
   function exportComplaintNotebook(c) {
     const nb = { cells: [
       { cell_type: 'markdown', metadata: {}, source: [`# ${c.title}\nID: ${c.id}\nType: ${c.type||''}\nInstitution: ${c.institution}\nStatus: ${c.status}\n`] },
@@ -2459,7 +2501,9 @@
     const panel = qs('#panel-calendar');
     if (!panel.classList.contains('active')) return; // only render when visible
     const container = qs('#calendarContainer');
-    const allDates = Data.complaints.flatMap(c => (c.history||[]).map(h => h.date).filter(Boolean));
+    const openOnly = true; // future: toggle
+    const source = openOnly ? Data.complaints.filter(c => !/(resolved|closed)/i.test(c.status||'')) : Data.complaints;
+    const allDates = source.flatMap(c => (c.history||[]).map(h => h.date).filter(Boolean));
     const minDate = allDates.length ? new Date(allDates.reduce((a,b)=>a<b?a:b)) : null;
     const maxDate = allDates.length ? new Date(allDates.reduce((a,b)=>a>b?a:b)) : null;
     const year = (minDate || new Date()).getFullYear();
@@ -2471,8 +2515,9 @@
       const grid = [];
       for (let d=1; d<=daysInMonth; d++) {
         const dateStr = new Date(m.getFullYear(), m.getMonth(), d).toISOString().slice(0,10);
-        const hits = Data.complaints.filter(c => (c.history||[]).some(h => h.date === dateStr));
-        grid.push(`<div class="cal-day${hits.length? ' cal-hit':''}" title="${dateStr} — ${hits.length} events">${d}</div>`);
+        const hits = source.filter(c => (c.history||[]).some(h => h.date === dateStr));
+        const statusClass = hits.some(c => /(escalated|phso|iopc|legal)/i.test(c.status||'')) ? ' status-escalated' : hits.some(c => /(resolved|closed)/i.test(c.status||'')) ? ' status-resolved' : (hits.length?' status-open':'');
+        grid.push(`<div class="cal-day${hits.length? ' cal-hit':''}${statusClass}" title="${dateStr} — ${hits.length} events">${d}</div>`);
       }
       return `<div class="cal-month"><div class="cal-title">${monthName}</div><div class="cal-grid">${grid.join('')}</div></div>`;
     }).join('');
@@ -2764,6 +2809,39 @@
     });
     qs('#oneCopy').addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(qs('#oneSummary').value||''); alert('Copied'); } catch { alert('Copy failed'); }
+    });
+  }
+
+  function openEditComplaintModal(complaint) {
+    const root = qs('#modalRoot'); if (!root) return;
+    root.innerHTML = `
+      <div class="modal-backdrop" id="editComplModal">
+        <div class="modal">
+          <div class="modal-header"><div class="section-title">Edit Complaint</div><button class="btn secondary" id="editComplClose">Close</button></div>
+          <div class="modal-body"><div class="form">
+            <div class="form-row"><label>Title<input id="ecTitle" value="${(complaint.title||'').replace(/\"/g,'&quot;')}" /></label><label>Date Filed<input id="ecDate" type="date" value="${complaint.dateFiled||''}" /></label></div>
+            <div class="form-row"><label>Institution<input id="ecInst" value="${(complaint.institution||'').replace(/\"/g,'&quot;')}" /></label><label>Status<input id="ecStatus" value="${(complaint.status||'').replace(/\"/g,'&quot;')}" /></label></div>
+            <div class="form-row"><label>Type<input id="ecType" value="${(complaint.type||'').replace(/\"/g,'&quot;')}" /></label></div>
+            <div class="form-row"><label>Content<textarea id="ecContent" rows="4">${complaint.complaintContent||''}</textarea></label></div>
+          </div></div>
+          <div class="modal-footer form-actions"><button class="btn" id="editComplSave">Save</button></div>
+        </div>
+      </div>`;
+    const close = () => { root.innerHTML = ''; };
+    qs('#editComplClose').addEventListener('click', close);
+    qs('#editComplModal').addEventListener('click', (e) => { if (e.target.id === 'editComplModal') close(); });
+    qs('#editComplSave').addEventListener('click', async () => {
+      complaint.title = qs('#ecTitle').value||complaint.title;
+      complaint.dateFiled = qs('#ecDate').value||complaint.dateFiled;
+      complaint.institution = qs('#ecInst').value||complaint.institution;
+      const st = qs('#ecStatus').value||complaint.status; if (st && st !== complaint.status) { complaint.status = st; complaint.escalationPath = Array.from(new Set([...(complaint.escalationPath||[]), st])); }
+      complaint.type = qs('#ecType').value||complaint.type;
+      complaint.complaintContent = qs('#ecContent').value||complaint.complaintContent;
+      await appendHistory(complaint, 'Complaint edited');
+      Data.upsertComplaint(complaint);
+      showToast('Complaint updated');
+      close();
+      showComplaintDetails(complaint);
     });
   }
 
